@@ -1,0 +1,28 @@
+---
+faults:
+  - link_fault:
+      pre_injection_time: 15
+      injection_time: 15
+      post_injection_time: 15
+      type: "link_fault:loss"
+      type_arg: ['50']
+      identifiers: 
+        - "h1->s1"
+        - "s1->h1"
+      pattern: "degradation"  # user-provided, "burst", "degradation"
+      pattern_arg: ['5']
+...
+
+- How to async: interface injections
+  - Call up separate python instance
+    - For each node(=network namespace/process group): Start a shell in that namespace
+        - Make it be in the same process group so that it dies when mininet terminates
+    - (CPU Limited nodes limit via cgroups, so we _should_ be able to run in the source process group without a problem - just don't touch the cgroup
+
+- How/what to inject on host
+  - Same as above, but run in same cgroup (if applicable): We may want to "inject" a usage of 50% of their CPU, or something
+  - Then we can block CPUs, do stuff with interfaces, communicate via localhost, etc.
+
+- How to inject into pre-existing tc stuff
+- How to give debug/analysis output/make this useful?
+- Mittelfristig, how to auto-generate "something useful", e.g. how do we work ourselves into a CI pipeline

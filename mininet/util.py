@@ -10,7 +10,7 @@ from functools import partial
 from os import O_NONBLOCK
 from resource import getrlimit, setrlimit, RLIMIT_NPROC, RLIMIT_NOFILE
 from select import poll, POLLIN, POLLHUP
-from subprocess import call, check_call, Popen, PIPE, STDOUT
+from subprocess import call,run, check_call, Popen, PIPE, STDOUT
 from sys import exit  # pylint: disable=redefined-builtin
 from time import sleep
 
@@ -80,7 +80,7 @@ except ImportError:
 def run( cmd ):
     """Simple interface to subprocess.call()
        cmd: list of command params"""
-    return call( cmd.split( ' ' ) )
+    return run( cmd.split( ' ' ) )
 
 def checkRun( cmd ):
     """Simple interface to subprocess.check_call()
