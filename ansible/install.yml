@@ -59,6 +59,12 @@
 
    - name: install pexpect
      pip: name=pexpect executable={{pip_path.stdout}}
+     
+   - name: install pyyaml
+     pip: name=pyyaml executable={{pip_path.stdout}}
+     
+   - name: install aiofiles
+     pip: name=aiofiles executable={{pip_path.stdout}}
 
    - name: build and install Containernet (using Mininet installer)
      shell: PYTHON=python3 containernet/util/install.sh -fnv
