@@ -269,7 +269,9 @@ class Node( object ):
     def readline( self ):
         """Buffered readline from node, potentially blocking.
            returns: line (minus newline) or None"""
+
         self.readbuf += self.read( 1024 )
+
         if '\n' not in self.readbuf:
             return None
         pos = self.readbuf.find( '\n' )
@@ -287,7 +289,11 @@ class Node( object ):
         self.unmountPrivateDirs()
         if self.shell:
             if self.shell.poll() is None:
+                # PGID is the same as the PID of the first process in the process group.
+                # This ID is used for signaling related processes.
+                # If a command starts just one process, its PID and PGID are the same.
                 os.killpg( self.shell.pid, signal.SIGHUP )
+
         self.cleanup()
 
     def stop( self, deleteIntfs=False ):

@@ -19,7 +19,7 @@ from mininet.log import lg, info
 from mininet import log
 from mininet.util import irange, quietRun
 from mininet.link import Link
-from mininet.faultcontroller import FaultController
+from mininet.faultcontrollerstarter import FaultControllerStarter
 
 flush = sys.stdout.flush
 
@@ -79,7 +79,7 @@ async def run_test_commands(net: Mininet):
     await asyncio.sleep(5)
     log.info("starting after iperf\n")
     #h1.popen(iperf_command + " &> /home/containernet/after_run", shell=True)
-    h1.cmd(iperf_command + " &> /home/containernet/during_run")
+    h1.cmd(iperf_command + " &> /home/containernet/after_run")
     # await asyncio.sleep(10)
     log.info("Done\n")
     await asyncio.sleep(10)
@@ -89,20 +89,17 @@ async def run_test_commands(net: Mininet):
 
 async def inject(net: Mininet):
     log.info("The net is a faulty boy\n")
+    lg.setLogLevel('debug')
 
     filepath = ("/home/containernet/containernet/faulties/mvp.yml") # TODO
-    faultcontroller = FaultController(net, filepath)
+    faultcontroller = FaultControllerStarter(net, filepath)
 
-    parallel_stuff = asyncio.create_task(run_test_commands(net))
+    faultcontroller.go()
 
-    log.info("Fault go\n")
-    task = asyncio.create_task(faultcontroller.go())
-    log.info("Fault going\n")
+    await run_test_commands(net)
 
-    await parallel_stuff
-    await task
 
-    log.info("Done done done")
+    log.info("Test done, injections done, preparing for teardown\n")
 
 
 

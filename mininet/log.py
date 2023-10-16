@@ -75,6 +75,8 @@ class Singleton( type ):
         return cls.instance
 
 
+
+
 class MininetLogger( Logger, object ):
     """Mininet-specific logger
        Enable each mininet .py file to with one import:
@@ -174,3 +176,4 @@ lg.info, lg.output, lg.warning, lg.error, lg.debug = _loggers
 info, output, warning, error, debug = _loggers
 warn = warning  # alternate/old name
 setLogLevel = lg.setLogLevel
+
