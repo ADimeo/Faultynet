@@ -554,8 +554,11 @@ def mountCgroups():
     mounts = quietRun( 'grep cgroup /proc/mounts' )
     cgdir = '/sys/fs/cgroup'
     csdir = cgdir + '/cpuset'
-    if ('cgroup %s' % cgdir not in mounts and
-            'cgroups %s' % cgdir not in mounts):
+    if (('cgroup %s' % cgdir not in mounts and
+            'cgroups %s' % cgdir not in mounts)):
+        # You may be here because your system is running on cgroups2 instead of cgroups 1
+        # This is commonly the case in modern systems, e.g. Changed to cgroup2 in 21.10
+        # The simplest solution is changing
         raise Exception( "cgroups not mounted on " + cgdir )
     if 'cpuset %s' % csdir not in mounts:
         errRun( 'mkdir -p ' + csdir )

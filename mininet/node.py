@@ -256,7 +256,7 @@ class Node( object ):
            size: maximum number of characters to return"""
         count = len( self.readbuf )
         if count < size:
-            data = os.read( self.stdout.fileno(), size - count )
+            data = os.read( self.stdout.fileno(), size - count ) # This line blocks if you try to reuse the shell
             self.readbuf += self.decoder.decode( data )
         if size >= len( self.readbuf ):
             result = self.readbuf
@@ -846,7 +846,8 @@ class Docker ( Host ):
             storage_opt=self.storage_opt,
             # Assuming Docker uses the cgroupfs driver, we set the parent to safely
             # access cgroups when modifying resource limits.
-            cgroup_parent='docker.slice'
+            # cgroup_parent='docker.slice'
+            cgroup_parent='mininetcgroup.slice'
         )
 
         if kwargs.get("rm", False):
