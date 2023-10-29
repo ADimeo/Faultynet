@@ -13,15 +13,30 @@ import time
 from functools import partial
 
 from mininet.net import Mininet
-from mininet.node import UserSwitch, OVSKernelSwitch, Controller
+from mininet.node import UserSwitch, OVSKernelSwitch, Controller, CPULimitedHost
 from mininet.topo import Topo
 from mininet.log import lg, info
 from mininet import log
-from mininet.util import irange, quietRun
+from mininet.util import irange, quietRun, custom
 from mininet.link import Link
 from mininet.faultcontrollerstarter import FaultControllerStarter
 
 flush = sys.stdout.flush
+
+class CgroupTestTopo(Topo):
+    "used to test cpu utilisation."
+
+    # pylint: disable=arguments-differ
+    def build(self, N, **params):
+        # Create switches and hosts
+        h1 = self.addHost('h1')
+
+        h2 = self.addHost('h2')
+        switch = self.addSwitch('s1')
+
+        self.addLink(h1, switch)
+        self.addLink(h2, switch)
+        # Wire up switches
 
 
 class LinearTestTopo(Topo):
@@ -38,6 +53,42 @@ class LinearTestTopo(Topo):
         self.addLink(h1, switch)
         self.addLink(h2, switch)
         # Wire up switches
+
+
+async def cgroup_test_commands(net: Mininet):
+    command = "systemd - cgtop - bn1 | grep mininetcgroup.slice | awk '{print $1, $3}'" # output i s "cgroup name" "cpu usage"
+
+    cpu_limited_h1 = net.hosts[0]
+    if not isinstance(cpu_limited_h1, CPULimitedHost):
+        # cpu_limited_h1 is the switch, the other host must be cpu limited
+        cpu_limited_h1 = net.hosts[1]
+    # This tests starts us off at  no cpu usage, and slowly ramps up cpu usage
+    # with stress-ng s -l option
+
+    lg.setLogLevel('debug')
+    lg.debug("STARTING DEBUG INFO")
+    cpu_limited_h1.setCPUFrac(.3, "cfs")
+    lg.debug("ENDING DEBUG INFO")
+
+    # CPU usage goes 20,40,60,80, each for 10 seconds
+    stress_command = "stress-ng -l {} -t 15 --cpu 1 --cpu-method decimal64" # decimal64 gives usages which are relatively close to the requested usage, unlike euler
+    log.info("Starting CPU Stressor: 10%\n")
+    cpu_limited_h1.cmd(stress_command.format(str(10)))
+    time.sleep(5)
+    log.info("Starting CPU Stressor: 20%\n")
+    cpu_limited_h1.cmd(stress_command.format(str(20)))
+    time.sleep(5)
+    log.info("Starting CPU Stressor: 50%\n")
+    cpu_limited_h1.cmd(stress_command.format(str(50)))
+    time.sleep(5)
+    log.info("Starting CPU Stressor: 90%\n")
+    cpu_limited_h1.cmd(stress_command.format(str(90)))
+    time.sleep(5)
+    log.info("Done")
+
+    # TODO continue here - think about how to propagate a cpu injection (or node injection) through the system
+
+
 
 async def run_test_commands(net: Mininet):
     h1 = net.hosts[0]
@@ -83,6 +134,13 @@ async def inject(net: Mininet):
     lg.setLogLevel('debug')
 
     filepath = ("/home/containernet/containernet/faulties/mvp.yml") # TODO
+
+
+
+    # filepath = ("/home/containernet/containernet/faulties/mvp.yml") # TODO
+    # filepath = "/home/containernet/containernet/faulties/mvp_stress-ng_test.yml"
+    filepath = "/home/containernet/containernet/faulties/mvp_custom_command_test.yml"
+    # TODO up next: Get node injector to run
     faultcontroller = FaultControllerStarter(net, filepath)
     faultcontroller.go()
 

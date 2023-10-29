@@ -14,7 +14,7 @@ import yaml
 from mininet import log
 from mininet.net import Mininet
 from mininet.node import Node
-from mininet.thorfi_injector.injector_agent import Injector
+from mininet.thorfi_injector.injector_agent import Injector, NodeInjector
 
 """
 # TODO
@@ -70,6 +70,7 @@ class FaultControllerStarter(object):
 
             new_identifier_strings = []
             for identifier_string in fault_dict.get("identifiers"):
+                # Identifiers are in a->b or a->b:interface pattern, or in "a" node pattern
                 node_identifying_tuple = FaultControllerStarter._get_mininet_agnostic_identifiers_from_identifier_string(net, identifier_string)
                 new_identifier_strings.append((repr(node_identifying_tuple)))
             fault_dict['identifiers'] = new_identifier_strings
@@ -97,25 +98,33 @@ class FaultControllerStarter(object):
 
 
     @staticmethod
-    def _get_node_and_interface_name_from_identifier_string(net:Mininet, identifier_string):
-        implicit_regex = "^(\w*)->(\w*)$"  # matches "host_name->host_name"
-        explicit_regex = "^(\w*)->(\w*):(\w*)$"  # matches "host_name->host_name:interface_name", useful if more than one link exists
+    def _get_node_and_interface_name_from_identifier_string(net:Mininet, identifier_string)->(str,Node):
+        # These patterns are expected for link_fault s
+        implicit_link_regex = "^(\w*)->(\w*)$"  # matches "host_name->host_name"
+        explicit_link_regex = "^(\w*)->(\w*):(\w*)$"  # matches "host_name->host_name:interface_name", useful if more than one link exists
 
-        if (match := re.match(implicit_regex, identifier_string)):
+        if match := re.match(implicit_link_regex, identifier_string):
             nodename_a = match.groups()[0]
             nodename_b = match.groups()[1]
             explicit_name = None
-        elif (match := re.match(explicit_regex, identifier_string)):
+        elif match := re.match(explicit_link_regex, identifier_string):
             nodename_a = match.groups()[0]
             nodename_b = match.groups()[1]
             explicit_name = match.groups()[2]
         else:
-            log.warn(f"Argument '{identifier_string}' doesn't conform to any known format\n")
-            return None, None
+            # The identifier is in node pattern, so just the name of the node, no interface required.
+            nodename_a = identifier_string
+            nodename_b = None
 
         # TODO create a lookup dict and update it when appropriate if this is a performance bottleneck
         corresponding_interface_name = None
         corresponding_host = None
+
+        if nodename_b is None:
+            # not looking for a interface name, so we can skip that part
+            for node in net.hosts: # TODO: Should we also run over switches/controllers?
+                if node.name == nodename_a:
+                    return None, node
 
         for link in net.links:
             if link.intf1.node.name == nodename_a and link.intf2.node.name == nodename_b:
@@ -176,9 +185,6 @@ class FaultControllerStarter(object):
        #     print("oh no")
         #    # TODO handle process not found error
         #    # This is weird, and potentially bad
-
-
-
 
         # control group
         # See https://docs.kernel.org/admin-guide/cgroup-v2.html#namespace for more information
@@ -271,7 +277,9 @@ class FaultInjector():
                 continue
             else:
                 link_fault_regex = "^link_fault:(\w*)$"
-                if (match := re.match(link_fault_regex, fault_type_value)):
+                node_fault_regex = "^node_fault:(\w*)$"
+
+                if match := re.match(link_fault_regex, fault_type_value):
                     fault_type = match.groups()[0]
 
                     # target_nics, target_node
@@ -300,6 +308,26 @@ class FaultInjector():
                                             post_injection_time=post_injection_time)
                         self.faults.append(injector)
                     # TODO document our yml fault format
+                if match := re.match(node_fault_regex, fault_type_value):
+                    fault_type = match.groups()[0]
+                    # target_nics, target_node
+                    for identifier_string in fault_dict.get("identifiers"):
+                        identifier_tuple = literal_eval(identifier_string)
+                        node_process_pid = identifier_tuple[0]
+
+                        injector = NodeInjector(
+                            target_process_pid= node_process_pid,
+                            fault_type = fault_type,
+
+                            pre_injection_time = pre_injection_time,
+                            injection_time = injection_time,
+                            post_injection_time = post_injection_time,
+
+                            fault_pattern = fault_pattern,
+                           fault_args = fault_args,
+                           fault_pattern_args = fault_pattern_args)
+                        self.faults.append(injector)
+                    # TODO document our yml fault format
                 else:
                     log.warn(f"Fault type unknown:'{fault_type_value}'\n")
 
@@ -323,8 +351,7 @@ class FaultInjector():
 
 
 def entrypoint_for_fault_controller(mininet_agnostic_faultconfig:dict, recv_pipe, send_pipe):
-    print(mininet_agnostic_faultconfig)
-    time.sleep(10)
+
     main_injector = FaultInjector(mininet_agnostic_faultconfig, recv_pipe, send_pipe)
     main_injector.wait_until_go()
 

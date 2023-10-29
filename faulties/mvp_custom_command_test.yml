@@ -1,0 +1,32 @@
+---
+faults:
+  - node_fault:
+      pre_injection_time: 5
+      injection_time: 5
+      post_injection_time: 5
+      type: "node_fault:custom"
+      type_args: ['echo "static on $(date)" >> custom_node_command_test.txt', 'echo "off $(date)" >> custom_node_command_test.txt']
+      identifiers: 
+        - "h1"
+      pattern: "static"  # user-provided, "burst", "degradation", 'static
+  - node_fault:
+      pre_injection_time: 10
+      injection_time: 10
+      post_injection_time: 5
+      type: "node_fault:custom"
+      type_args: [ 'echo "{}on $(date)" >> custom_node_command_test.txt', 'echo "off $(date)" >> custom_node_command_test.txt' ]
+      pattern: "degradation"
+      pattern_args: ['10', 2]
+      identifiers:
+        - "h1"
+  - node_fault:
+      pre_injection_time: 25
+      injection_time: 12
+      post_injection_time: 5
+      type_args: [ 'echo "burst on $(date)" >> custom_node_command_test.txt', 'echo "off $(date)" >> custom_node_command_test.txt' ]
+      type: "node_fault:custom"
+      pattern: "burst"
+      pattern_args: [2000, 4000] # burst length/period in ms
+      identifiers:
+          - "h1"
+...

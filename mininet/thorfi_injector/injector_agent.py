@@ -3,6 +3,7 @@ Note: Under  GPL-3.0 license license
 Document source from ThorFI
 """
 import asyncio
+import re
 import subprocess
 
 from mininet import log
@@ -958,6 +959,7 @@ class Injector:
 
         for i in range(burst_num):
 
+
             # iterate over all target devices to enable injection
             for interface in self.getTargetInterfaces():
                 log.debug("BURST ENABLE injection on nic %s\n" % (interface))
@@ -1402,3 +1404,200 @@ class Injector:
                     log.debug("Command '%s' was terminated not correctly (recode %s)" % (command, -retcode))
                 else:
                     log.debug("Command '%s' was terminated correctly (retcode %s)" % (command, retcode))
+
+
+class NodeInjector:
+    def __init__(self,
+                 target_process_pid=None,  # This pid represents the "node" we want to run on
+                 fault_type=None,  # "stress", custom, ???
+                 pre_injection_time=0,
+                 injection_time=20,
+                 post_injection_time=0,
+                 fault_args=None,  # For stress: Percentage. For custom: Start command/end command
+                 fault_pattern=None,  # persistent|burst|degradation
+                 fault_pattern_args=None
+                 # We want mode - for defaults like a CPU stressor, but also custom commands
+                 ):
+        self.target_process_pid = target_process_pid
+        self.fault_type = fault_type
+        self.pre_injection_time = pre_injection_time
+        self.injection_time = injection_time
+        self.post_injection_time = post_injection_time
+        self.fault_args = fault_args
+        self.fault_pattern = fault_pattern
+        self.fault_pattern_args = fault_pattern_args
+
+        if fault_type == "stress_cpu":
+            self.cpu_cgroup_name = self._get_cgroup_name()
+
+    async def go(self):
+        await self.do_injection()
+
+    def _get_cgroup_name(self):
+        pid = self.target_process_pid
+        path_to_process_cgroup = f"/proc/{pid}/cgroup"
+        cgroup_command = ["/usr/bin/cat", f"{path_to_process_cgroup}"]  # TODO make this binary part of the distribution
+        try:
+            cgroup_process = subprocess.run(cgroup_command, text=True, capture_output=True)
+            cgroup_process.check_returncode()
+            cgroup_path = cgroup_process.stdout
+            log.debug("cgroups for pid " + str(pid)+ ": " + cgroup_path)
+            cpu_cgroup_pattern = r"^(\d*):cpu,cpuacct:/(.*)$"
+            match = re.search(cpu_cgroup_pattern, cgroup_path, re.MULTILINE)
+            cgroup_name = match.group(2)
+            return cgroup_name
+
+        except subprocess.CalledProcessError:
+            log.error("Can't access cgroups information")
+        return None
+
+    def execute_command_for_node(self, pid_of_node, command_to_execute):
+        base_command = f"nsenter --target {str(pid_of_node)} --net --pid --all "
+        full_command = base_command + command_to_execute
+        retcode = call(full_command, shell=True)
+        if retcode < 0:
+            log.debug("Command '%s' was terminated not correctly (recode %s)\n" % (full_command, -retcode))
+        else:
+            log.debug("Command '%s' was terminated correctly (retcode %s)\n" % (full_command, retcode))
+
+    def _get_cgroup_size(self):
+        size_command = ["/usr/bin/cgget", "-g", "cpu", self.cpu_cgroup_name]
+        # TODO make this binary part of the distribution
+        try:
+            cgroup_process = subprocess.run(size_command, text=True, capture_output=True)
+            cgroup_process.check_returncode()
+            cpu_cgroup_details = cgroup_process.stdout
+
+            period_regex = r"^cpu\.cfs_period_us: (\d*)$"
+            quota_regex = r"^cpu\.cfs_quota_us: (\d*)$"
+            cpu_period = re.search(period_regex, cpu_cgroup_details, re.MULTILINE).group(1)
+            cpu_quota = re.search(quota_regex, cpu_cgroup_details, re.MULTILINE).group(1)
+
+            cpu_ratio = int(cpu_quota) / int(cpu_period)
+            return cpu_ratio
+        except subprocess.CalledProcessError:
+            log.error("Tried to find cgroup size for " + self.cpu_cgroup_name + ", but couldn't find it\n")
+            return None
+
+    async def _inject_burst(self):
+        if self.fault_type == 'custom':
+            burst_config = self.fault_pattern_args
+            burst_duration = int(burst_config[0]) / 1000
+            burst_period = int(burst_config[1]) / 1000  # after each burst, wait for (burst_period - burst_duration)
+            burst_num = int((self.injection_time) / burst_period)  # how often we burst
+
+            start_command = self.fault_args[0]
+            end_command = self.fault_args[1]
+
+            for _ in range(burst_num):
+                self.execute_command_for_node(self.target_process_pid, start_command)
+                await asyncio.sleep(burst_duration)
+                self.execute_command_for_node(self.target_process_pid, end_command)
+                await asyncio.sleep(burst_period - burst_duration)
+
+        elif self.fault_type == 'stress_cpu':
+            burst_config = self.fault_pattern_args # TODO shift this to use the /1000 format - for consistency
+            burst_duration = int(max(1, burst_config[0]/1000))
+            burst_period = int(burst_config[1]) / 1000  # after each burst, wait for (burst_period - burst_duration)
+            burst_num = int(self.injection_time / burst_period)  # how often we burst
+
+            cgroup_fraction = self._get_cgroup_size()
+            cpu_stress_percentage = int(self.fault_args[0])
+            stress_percentage_applied_to_cgroup = int(cpu_stress_percentage * cgroup_fraction)
+
+            stress_command = f"stress-ng -l {stress_percentage_applied_to_cgroup} -t {burst_duration} --cpu 1 --cpu-method decimal64"
+
+            for _ in range(burst_num):
+                self.execute_command_for_node(self.target_process_pid, stress_command)
+                await asyncio.sleep(burst_period - burst_duration)
+        # TODO handle else case
+
+
+    async def _inject_degradation(self):
+        if self.fault_type == 'custom':
+            start_base_command = self.fault_args[0]
+            end_base_command = self.fault_args[1]
+
+            if len(self.fault_args) > 2:
+                step_start = int(self.fault_args[2])
+            else:
+                step_start = 0
+
+            step_size = int(self.fault_pattern_args[0])
+            step_duration = int(self.fault_pattern_args[1])
+
+            # TODO verify that {} and number of arguments is the same
+            # TODO also skip argument insertaion if
+            # TODO expand this to allow for multiple arguments - but later
+            test_duration = 0
+
+            injection_intensity = step_start
+            while test_duration < self.injection_time:
+
+                start_command = start_base_command.format(injection_intensity)
+                end_command = end_base_command
+
+                self.execute_command_for_node(self.target_process_pid, start_command)
+                await asyncio.sleep(step_duration)
+                self.execute_command_for_node(self.target_process_pid, end_command)
+
+                injection_intensity = injection_intensity + step_size
+                test_duration += step_duration
+        elif self.fault_type == 'stress_cpu':
+            # increment by fault_pattern_args[0] every fault_pattern_args[1]
+            cgroup_fraction = self._get_cgroup_size()
+            cpu_stress_starting_percentage = int(self.fault_args[0])
+            step_size_in_percent = int(self.fault_pattern_args[0])
+            stress_step_duration = int(self.fault_pattern_args[1])
+
+            starting_stress_applied_to_cgroup = int(cpu_stress_starting_percentage * cgroup_fraction)
+            stress_base_command = "stress-ng -l {} -t {} --cpu 1 --cpu-method decimal64"
+
+            test_duration = 0
+            # TODO probably limit to 100%? The other stressers as well
+            injection_intensity = starting_stress_applied_to_cgroup
+            while test_duration < self.injection_time:
+                stress_command = stress_base_command.format(injection_intensity, stress_step_duration)
+                self.execute_command_for_node(self.target_process_pid, stress_command)
+                injection_intensity = int(injection_intensity + (step_size_in_percent * cgroup_fraction))
+                test_duration += stress_step_duration
+                # No need to sleep, command runs for as long as indicated
+        # TODO handle else case
+
+    async def _inject_static(self):
+        # Build up
+        if self.fault_type == 'custom':
+            duration_in_seconds = self.injection_time
+
+            start_command = self.fault_args[0]
+            end_command = self.fault_args[1]
+            self.execute_command_for_node(self.target_process_pid, start_command)
+            await asyncio.sleep(duration_in_seconds)
+            self.execute_command_for_node(self.target_process_pid, end_command)
+
+        elif self.fault_type == 'stress_cpu':
+            # inject here
+            # Users want n % cpu usage _on a node_ (=cgroup), but the stress-ng takes a global load.
+            # To get our in-cpu we reduce the stress instruction by however much cpu is not allowed in our cgroup
+            cgroup_fraction = float(self._get_cgroup_size())
+            cpu_stress_percentage = float(self.fault_args[0])
+            stress_percentage_applied_to_cgroup = int(cpu_stress_percentage * cgroup_fraction)
+            duration_in_seconds = self.injection_time
+            stress_base_command = f"stress-ng -l {stress_percentage_applied_to_cgroup} -t {duration_in_seconds} --cpu 1 --cpu-method decimal64"
+            self.execute_command_for_node(self.target_process_pid, stress_base_command)
+            # No need to sleep, command runs for as long as indicated
+        # TODO handle else case
+
+    async def do_injection(self):
+        # TODO sensible logging downstream from here
+        await asyncio.sleep(self.pre_injection_time)
+        if self.fault_pattern == 'burst':
+            await self._inject_burst()
+        elif self.fault_pattern == 'degradation':
+            await self._inject_degradation()
+        elif self.fault_pattern == 'static':
+            await self._inject_static()
+        # TODO handle else case
+
+        await asyncio.sleep(self.post_injection_time)
+        return
