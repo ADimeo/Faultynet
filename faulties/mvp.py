@@ -26,20 +26,11 @@ flush = sys.stdout.flush
 
 class LinearTestTopo(Topo):
     "Topology for a string of N hosts and N-1 switches."
-
-
-    """TODO, fixing current bugs:
-    - cleanup on shutdown, specifically for the switches ( in root namespace, or it'll fail on second run)
-    - Did a fix last time, didn't call correctly. Up now is testing whether that fix works
-    - 
-    - """
-
-
-
     # pylint: disable=arguments-differ
     def build(self, N, **params):
         # Create switches and hosts
         h1 = self.addHost('h1')
+
         h2 = self.addHost('h2')
         switch = self.addSwitch('s1')
 
@@ -93,7 +84,6 @@ async def inject(net: Mininet):
 
     filepath = ("/home/containernet/containernet/faulties/mvp.yml") # TODO
     faultcontroller = FaultControllerStarter(net, filepath)
-
     faultcontroller.go()
 
     await run_test_commands(net)
@@ -101,23 +91,25 @@ async def inject(net: Mininet):
 
     log.info("Test done, injections done, preparing for teardown\n")
 
-
-
 def linearBandwidthTest(lengths):
     "Check bandwidth at various lengths along a switch chain."
-
     results = {}
     switchCount = max(lengths)
     hostCount = switchCount + 1
+
 
     topo = LinearTestTopo(hostCount)
 
     Switch = OVSKernelSwitch
     # link = partial(TCLink, delay='30ms', bw=100) # TODO this requires custom re-building + injection logic
-    net = Mininet(topo=topo, switch=Switch,
-                  controller=Controller, link=Link,
-                  waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
+   #  net = Mininet(topo=topo, switch=Switch,
+   #               controller=Controller, link=Link,
+    #              waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
 
+    host = custom(CPULimitedHost, cpu=.1)
+    net = Mininet(topo=topo, switch=Switch,
+                  controller=Controller, link=Link, host=host,
+                  waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
     net.start()
     asyncio.run(inject(net))
     net.stop()

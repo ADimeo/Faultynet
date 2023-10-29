@@ -65,7 +65,8 @@ class FaultControllerStarter(object):
         for fault_object in yml_config.get("faults"):
             # We expect a single key here, either link_fault or node_fault
             # Right now we don't care which one it is, so just get the first key
-            fault_dict = fault_object.get(list(fault_object.keys())[0])
+            fault_type = list(fault_object.keys())[0]
+            fault_dict = fault_object.get(fault_type)
 
             new_identifier_strings = []
             for identifier_string in fault_dict.get("identifiers"):
@@ -191,10 +192,9 @@ class FaultControllerStarter(object):
             cgroup_process = subprocess.run(cgroup_command, text=True, capture_output=True)
             cgroup_process.check_returncode()
             cgroup_path = cgroup_process.stdout
-            if not cgroup_path.startswith("0::/"):
+            if cgroup_path.startswith("0::/"): # Note: This is cgroup2 format, cgroup1 looks different
                 # TODO handle unexpected format
-                print("oh no")
-            cgroup = cgroup_path.removeprefix("0::/")
+                cgroup = cgroup_path.removeprefix("0::/")
         except subprocess.CalledProcessError:
             # TODO handle process not found error
             print("Oh no")
@@ -246,16 +246,18 @@ class FaultInjector():
         self.faults = []
 
         for fault_object in config.get("faults"):
-            fault_dict = fault_object.get("link_fault")
+            fault_type = list(fault_object.keys())[0]
+            fault_dict = fault_object.get(fault_type)
+
             # fault_target_protocol, fault_target_traffic, src_port, dst_port
             fault_target_traffic, fault_target_protocol, src_port, dst_port = self._get_target_arguments_from_fault_dict(
                 fault_dict)
 
             # type, pattern, type_arg, pattern_arg
-            fault_args = fault_dict.get('type_arg', None)  # TODO handle absence gracefully
+            fault_args = fault_dict.get('type_args', None)  # TODO handle absence gracefully
 
             fault_pattern = fault_dict.get('pattern', 'persistent')
-            fault_pattern_args = fault_dict.get('pattern_arg', None)  # TODO handle absence gracefully
+            fault_pattern_args = fault_dict.get('pattern_args', None)  # TODO handle absence gracefully
 
             # pre_injection_time, injection_time, post_injection_time
             pre_injection_time = fault_dict.get('pre_injection_time', 0)

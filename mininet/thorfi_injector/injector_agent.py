@@ -1186,7 +1186,8 @@ class Injector:
             "[make_nics_injection_command] CONFIG: device %s, fault_type %s, fault_pattern %s, fault_pattern_args %s, fault_args %s, tc_cmd %s\n"
             % (device, fault_type, fault_pattern, fault_pattern_args, fault_args, tc_cmd))
 
-        base_command = 'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc qdisc ' + tc_cmd + ' dev ' + device + ' root netem '
+        base_command = 'nsenter --target ' + str(
+            node_pid) + ' --net  ' + tc_path + '/tc qdisc ' + tc_cmd + ' dev ' + device + ' root netem '
         command = None
 
         # NOTE: for NODE_DOWN and NIC_DOWN fault type does not make sense the random fault_pattern.
@@ -1216,7 +1217,8 @@ class Injector:
                 # the command is like: tc qdisc add dev tapa68bfef8-df root tbf rate 256kbit burst 1600 limit 3000
                 default_bottleneck_burst = '1600'
                 default_limit_burst = '3000'
-                command = 'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc qdisc ' + tc_cmd + ' dev ' + device + ' root tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst
+                command = 'nsenter --target ' + str(
+                    node_pid) + ' --net  ' + tc_path + '/tc qdisc ' + tc_cmd + ' dev ' + device + ' root tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst
 
             elif 'down' in fault_type:
                 # TODO implement this
@@ -1258,7 +1260,8 @@ class Injector:
 
         if enable:
 
-            base_command = 'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc filter add dev ' + device + ' parent 1:0 protocol ip prio 1 u32 '
+            base_command = 'nsenter --target ' + str(
+                node_pid) + ' --net  ' + tc_path + '/tc filter add dev ' + device + ' parent 1:0 protocol ip prio 1 u32 '
             cmd_list = [tc_path + '/tc qdisc add dev ' + device + ' root handle 1: prio']
 
             target_protocol_cmd = 'match ip protocol ' + self.target_protocol_table[target_protocol] + ' 0xff'
@@ -1271,10 +1274,10 @@ class Injector:
             if target_src_ports:
                 for target_port in target_src_ports:
                     target_port_cmd = 'match ip sport ' + str(target_port) + ' 0xffff'
-                    cmd_list.append(                        base_command + target_protocol_cmd + ' ' + target_port_cmd + ' flowid 1:1')
+                    cmd_list.append(base_command + target_protocol_cmd + ' ' + target_port_cmd + ' flowid 1:1')
 
             else:
-                cmd_list.append(                    base_command + target_protocol_cmd + ' flowid 1:1')
+                cmd_list.append(base_command + target_protocol_cmd + ' flowid 1:1')
 
             # enable fault injection
 
@@ -1284,11 +1287,13 @@ class Injector:
                     # e.g., tc qdisc add dev tap0897f3c6-e0 root netem delay 50ms reorder 50%
                     random_perc = 100 - int(fault_pattern_args)
                     cmd_list.append(
-                        'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_args + ' reorder ' + str(
+                        'nsenter --target ' + str(
+                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_args + ' reorder ' + str(
                             random_perc) + '%')
                 else:
                     cmd_list.append(
-                        'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_pattern_args + '%')
+                        'nsenter --target ' + str(
+                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_pattern_args + '%')
 
             elif 'persistent' in fault_pattern:
 
@@ -1298,7 +1303,8 @@ class Injector:
                     default_bottleneck_burst = '1600'
                     default_limit_burst = '3000'
                     cmd_list.append(
-                        'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
+                        'nsenter --target ' + str(
+                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
 
                 else:
                     if 'delay' in fault_type:
@@ -1307,12 +1313,14 @@ class Injector:
                         tc_arg = '100%'
 
                     cmd_list.append(
-                        'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + tc_arg)
+                        'nsenter --target ' + str(
+                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + tc_arg)
 
         else:
             cmd_list = []
             cmd_list.append(
-                'nsenter --target ' + str(node_pid) + ' --net  ' + tc_path + '/tc qdisc del dev ' + device + ' root handle 1: prio')
+                'nsenter --target ' + str(
+                    node_pid) + ' --net  ' + tc_path + '/tc qdisc del dev ' + device + ' root handle 1: prio')
 
         log.debug("cmd_list generated => %s\n" % cmd_list)
 
