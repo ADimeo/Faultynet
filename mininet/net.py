@@ -100,6 +100,7 @@ from itertools import chain, groupby
 from math import ceil
 
 from mininet.cli import CLI
+from mininet.faultcontrollerstarter import FaultControllerStarter
 from mininet.log import info, error, debug, output, warn
 from mininet.node import ( Node, Docker, Host, OVSKernelSwitch,
                            DefaultController, Controller, OVSSwitch, OVSBridge )
@@ -129,7 +130,7 @@ class Mininet( object ):
                   build=True, xterms=False, cleanup=False, ipBase='10.0.0.0/8',
                   inNamespace=False,
                   autoSetMacs=False, autoStaticArp=False, autoPinCpus=False,
-                  listenPort=None, waitConnected=False ):
+                  listenPort=None, waitConnected=False, faultFilepath=None):
         """Create Mininet object.
            topo: Topo (topology) object or None
            switch: default Switch class
@@ -170,6 +171,9 @@ class Mininet( object ):
         self.nextCore = 0  # next core for pinning hosts to CPUs
         self.listenPort = listenPort
         self.waitConn = waitConnected
+
+        self.faultFilepath = faultFilepath # TODO verify that this file exists?
+        self.faultController = None # TODO move initialisation of faultControllerStarter to here, for config or something?
 
         self.hosts = []
         self.switches = []
@@ -525,7 +529,7 @@ class Mininet( object ):
             # it needs to be done somewhere.
         info( '\n' )
 
-    def buildFromTopo( self, topo=None ):
+    def buildFromTopo( self, topo=None ): # is this relevant for us?
         """Build mininet from a topology object
            At the end of this function, everything should be connected
            and up."""
@@ -590,6 +594,8 @@ class Mininet( object ):
             self.startTerms()
         if self.autoStaticArp:
             self.staticArp()
+        if self.faultFilepath:
+            self.buildFaultController(self.faultFilepath)
         self.built = True
 
     def startTerms( self ):
@@ -616,6 +622,9 @@ class Mininet( object ):
                 if src != dst:
                     src.setARP( ip=dst.IP(), mac=dst.MAC() )
 
+    def buildFaultController(self, faultFile):
+        print("TODO")
+
     def start( self ):
         "Start controller and switches."
         if not self.built:
@@ -640,6 +649,11 @@ class Mininet( object ):
         info( '\n' )
         if self.waitConn:
             self.waitConnected( self.waitConn )
+        print("YEEEEHAW")
+        print("OI " + self.faultFilepath)
+        if self.faultFilepath:
+            self.faultController = FaultControllerStarter(self, self.faultFilepath)
+            self.faultController.go()
 
     def stop( self ):
         "Stop the controller(s), switches and hosts"

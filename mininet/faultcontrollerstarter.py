@@ -4,15 +4,14 @@ Yeah there'll defs be documentation here, but right now that's TODO
 import asyncio
 import re
 import subprocess
-import copy
 import time
+
 from ast import literal_eval
 from multiprocessing import Pipe, Process
 
 import yaml
 
 from mininet import log
-from mininet.net import Mininet
 from mininet.node import Node
 from mininet.thorfi_injector.injector_agent import Injector, NodeInjector
 
@@ -23,30 +22,37 @@ from mininet.thorfi_injector.injector_agent import Injector, NodeInjector
         - Specifically, supporting TcNodes is non-trivial
 """
 
-
 MESSAGE_SETUP_DONE = "m_faultinjector_ready"
 MESSAGE_SETUP_ERROR = "m_faultinjector_setuperror"
 MESSAGE_START_INJECTING = "m_faultinjector_go"
 MESSAGE_INJECTION_DONE = "m_faultinjector_done"
 
+
 class FaultControllerStarter(object):
 
-    def __init__(self, net_reference: Mininet, filepath_to_config_file=None):
+    def __init__(self, net_reference: 'Mininet', filepath_to_config_file=None):
         self.net_reference = net_reference
         self.faults = []
         self.total_runtime = 0
+        self.faults_are_active = False
 
         config = self._get_base_config_dict(filepath_to_config_file)
         agnostic_config = self._build_yml_with_mininet_agnostic_identifiers(self.net_reference, config)
 
-        recv_pipe, send_pipe = Pipe()
-        fault_process = Process(target=entrypoint_for_fault_controller, args=(agnostic_config, recv_pipe, send_pipe))
+        recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults = Pipe()
+        recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet = Pipe()
+        fault_process = Process(target=entrypoint_for_fault_controller, args=(agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet))
         fault_process.start()
+
+        self.send_pipe_mininet_to_faults = send_pipe_mininet_to_faults
+        self.recv_pipe_mininet_to_faults = recv_pipe_mininet_to_faults
+        self.send_pipe_faults_to_mininet = send_pipe_faults_to_mininet
+        self.recv_pipe_faults_to_mininet = recv_pipe_faults_to_mininet
+
         log.debug("Fault process started\n")
-        response = recv_pipe.recv_bytes()
+        response = recv_pipe_faults_to_mininet.recv_bytes()
         log.debug("Received message from FI\n")
-        self.send_pipe = send_pipe
-        self.recv_pipe = recv_pipe
+        # We need the second pipe,Otherwise we're getting interference from ourselves
 
         if response == MESSAGE_SETUP_DONE.encode():
             log.debug("FaultController has signalled that it's ready\n")
@@ -57,11 +63,26 @@ class FaultControllerStarter(object):
             return
 
     def go(self):
-        log.debug("Initiating faults\n")
-        self.send_pipe.send_bytes(MESSAGE_START_INJECTING.encode())
+        log.info("Initiating faults\n")
+        self.faults_are_active = True
+        self.send_pipe_mininet_to_faults.send_bytes(MESSAGE_START_INJECTING.encode())
+
+    def is_active(self):
+        if not self.faults_are_active:
+            return False
+        # Injector might have sent us "done" message
+        if self.recv_pipe_faults_to_mininet.poll() is False:
+            return True
+        potential_done_message = self.recv_pipe_faults_to_mininet.recv_bytes()
+        if potential_done_message == MESSAGE_INJECTION_DONE.encode():
+            self.faults_are_active = False
+            return False
+        # This destroys the message in the pipe, but "I'm done injecting" is the only message we expect
+
+        return True
 
 
-    def _build_yml_with_mininet_agnostic_identifiers(self, net:Mininet, yml_config:dict)->dict:
+    def _build_yml_with_mininet_agnostic_identifiers(self, net: 'Mininet', yml_config: dict) -> dict:
         for fault_object in yml_config.get("faults"):
             # We expect a single key here, either link_fault or node_fault
             # Right now we don't care which one it is, so just get the first key
@@ -71,7 +92,8 @@ class FaultControllerStarter(object):
             new_identifier_strings = []
             for identifier_string in fault_dict.get("identifiers"):
                 # Identifiers are in a->b or a->b:interface pattern, or in "a" node pattern
-                node_identifying_tuple = FaultControllerStarter._get_mininet_agnostic_identifiers_from_identifier_string(net, identifier_string)
+                node_identifying_tuple = FaultControllerStarter._get_mininet_agnostic_identifiers_from_identifier_string(
+                    net, identifier_string)
                 new_identifier_strings.append((repr(node_identifying_tuple)))
             fault_dict['identifiers'] = new_identifier_strings
 
@@ -87,18 +109,17 @@ class FaultControllerStarter(object):
             config = yaml.safe_load(file)
         return config
 
-
     @staticmethod
-    def _get_mininet_agnostic_identifiers_from_identifier_string(net:Mininet, identifier_string:str)->(int, str, str, str):
-        corresponding_interface_name, corresponding_host = FaultControllerStarter._get_node_and_interface_name_from_identifier_string(net, identifier_string)
-        process_group_id, net_namespace_identifier, cgroup, interface_name = FaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(net, corresponding_interface_name, corresponding_host)
+    def _get_mininet_agnostic_identifiers_from_identifier_string(net: 'Mininet', identifier_string: str) -> (
+    int, str, str, str):
+        corresponding_interface_name, corresponding_host = FaultControllerStarter._get_node_and_interface_name_from_identifier_string(
+            net, identifier_string)
+        process_group_id, net_namespace_identifier, cgroup, interface_name = FaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
+            corresponding_interface_name, corresponding_host)
         return process_group_id, net_namespace_identifier, cgroup, interface_name
 
-
-
-
     @staticmethod
-    def _get_node_and_interface_name_from_identifier_string(net:Mininet, identifier_string)->(str,Node):
+    def _get_node_and_interface_name_from_identifier_string(net: 'Mininet', identifier_string) -> (str, Node):
         # These patterns are expected for link_fault s
         implicit_link_regex = "^(\w*)->(\w*)$"  # matches "host_name->host_name"
         explicit_link_regex = "^(\w*)->(\w*):(\w*)$"  # matches "host_name->host_name:interface_name", useful if more than one link exists
@@ -122,7 +143,7 @@ class FaultControllerStarter(object):
 
         if nodename_b is None:
             # not looking for a interface name, so we can skip that part
-            for node in net.hosts: # TODO: Should we also run over switches/controllers?
+            for node in net.hosts:  # TODO: Should we also run over switches/controllers?
                 if node.name == nodename_a:
                     return None, node
 
@@ -160,29 +181,31 @@ class FaultControllerStarter(object):
         return corresponding_interface_name, corresponding_host
 
     @staticmethod
-    def _get_passable_identifiers_from_node_and_interface_name(net:Mininet, corresponding_interface_name:str, corresponding_node:Node):
+    def _get_passable_identifiers_from_node_and_interface_name(corresponding_interface_name: str,
+                                                               corresponding_node: Node):
         # Returns a tuple of (pgid, net_namespace_identifier, cgroup, interface_name)#
         # process group id
-        process_group_id = corresponding_node.pid # If nodes assume this we can also assume it
+        process_group_id = corresponding_node.pid  # If nodes assume this we can also assume it
 
         # net namespace id
         net_namespace_identifier = None
         process_id = corresponding_node.pid
         path_to_process_namespace = f"/proc/{process_id}/ns/net"
-        net_namespace_command = ["/usr/bin/ls", "-iL",  f"{path_to_process_namespace}"] # TODO make this binary part of the distribution
-        #try:
+        net_namespace_command = ["/usr/bin/ls", "-iL",
+                                 f"{path_to_process_namespace}"]  # TODO make this binary part of the distribution
+        # try:
         completed_process = subprocess.run(net_namespace_command, text=True, capture_output=True)
         log.debug(f"Output from node namespace command: {completed_process.stdout}")
         print(completed_process.stderr)
         completed_process.check_returncode()
-            # Output will always have a pattern like "4026532254 /proc/2783/ns/net", even if not in a network namespace
-            # (Since it's just in the root namespace at that point
-            # If it has a pattern like
+        # Output will always have a pattern like "4026532254 /proc/2783/ns/net", even if not in a network namespace
+        # (Since it's just in the root namespace at that point
+        # If it has a pattern like
         net_ns_id = completed_process.stdout.split(' ')[0]
         net_namespace_identifier = net_ns_id
 
-       # except subprocess.CalledProcessError:
-       #     print("oh no")
+        # except subprocess.CalledProcessError:
+        #     print("oh no")
         #    # TODO handle process not found error
         #    # This is weird, and potentially bad
 
@@ -190,7 +213,7 @@ class FaultControllerStarter(object):
         # See https://docs.kernel.org/admin-guide/cgroup-v2.html#namespace for more information
         # as well as https://man.archlinux.org/man/cgroups.7
         # Write to         / sys / fs / cgroup / cgroup_name / cgroup.procs
-        cgroup = None # TOOD Continue here
+        cgroup = None  # TOOD Continue here
         path_to_process_cgroup = f"/proc/{process_id}/cgroup"
         cgroup_command = ["/usr/bin/cat", f"{path_to_process_cgroup}"]  # TODO make this binary part of the distribution
 
@@ -198,13 +221,12 @@ class FaultControllerStarter(object):
             cgroup_process = subprocess.run(cgroup_command, text=True, capture_output=True)
             cgroup_process.check_returncode()
             cgroup_path = cgroup_process.stdout
-            if cgroup_path.startswith("0::/"): # Note: This is cgroup2 format, cgroup1 looks different
+            if cgroup_path.startswith("0::/"):  # Note: This is cgroup2 format, cgroup1 looks different
                 # TODO handle unexpected format
                 cgroup = cgroup_path.removeprefix("0::/")
         except subprocess.CalledProcessError:
             # TODO handle process not found error
             print("Oh no")
-
 
         interface_name = corresponding_interface_name
 
@@ -212,28 +234,30 @@ class FaultControllerStarter(object):
 
 
 class FaultInjector():
-    def __init__(self, agnostic_config, recv_pipe, send_pipe):
+    def __init__(self, agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults,
+                 recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
         self.config = agnostic_config
         self.faults = []
         self.total_runtime = 0
 
-        self.recv_pipe = recv_pipe
-        self.send_pipe = send_pipe
+        self.recv_pipe_mininet_to_faults = recv_pipe_mininet_to_faults
+        self.send_pipe_mininet_to_faults = send_pipe_mininet_to_faults
 
-        self._configByFile(self.config) # TODO: Change config_by_file to be mininet agnostic
+        self.recv_pipe_faults_to_mininet = recv_pipe_faults_to_mininet
+        self.send_pipe_faults_to_mininet= send_pipe_faults_to_mininet
+
+        self._configByFile(self.config)  # TODO: Change config_by_file to be mininet agnostic
 
         log.debug("FI: Sending setup finished command\n")
-        self.send_pipe.send_bytes(MESSAGE_SETUP_DONE.encode())
-
+        self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_SETUP_DONE.encode())
 
     def wait_until_go(self):
         log.info("Fault injector is waiting for go command\n")
-        potential_go_message = self.recv_pipe.recv_bytes()
+        potential_go_message = self.recv_pipe_mininet_to_faults.recv_bytes()
         if potential_go_message == MESSAGE_START_INJECTING.encode():
             asyncio.run(self.go())
 
-
-# TODO do we need heartbeat/ability to kill this from the original process?
+    # TODO do we need heartbeat/ability to kill this from the original process?
 
     async def go(self):
         log.debug("Initiating faults\n")
@@ -244,7 +268,8 @@ class FaultInjector():
         log.debug("All faults scheduled.\n")
 
         await asyncio.gather(*fault_coroutines)
-
+        # All faults have finished injecting, so send the "done" message
+        self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_INJECTION_DONE.encode())
 
     def _configByFile(self, config):
         """Reconfigures this controller according to the given file """
@@ -288,7 +313,7 @@ class FaultInjector():
                         node_process_pid = identifier_tuple[0]
 
                         corresponding_interface_name = identifier_tuple[3]
-                        corresponding_interface_name = [corresponding_interface_name] # Injector expects array of nics
+                        corresponding_interface_name = [corresponding_interface_name]  # Injector expects array of nics
                         # TODO probably refactor that
                         injector = Injector(target_nics=corresponding_interface_name,
                                             target_namespace_pid=node_process_pid,
@@ -316,21 +341,20 @@ class FaultInjector():
                         node_process_pid = identifier_tuple[0]
 
                         injector = NodeInjector(
-                            target_process_pid= node_process_pid,
-                            fault_type = fault_type,
+                            target_process_pid=node_process_pid,
+                            fault_type=fault_type,
 
-                            pre_injection_time = pre_injection_time,
-                            injection_time = injection_time,
-                            post_injection_time = post_injection_time,
+                            pre_injection_time=pre_injection_time,
+                            injection_time=injection_time,
+                            post_injection_time=post_injection_time,
 
-                            fault_pattern = fault_pattern,
-                           fault_args = fault_args,
-                           fault_pattern_args = fault_pattern_args)
+                            fault_pattern=fault_pattern,
+                            fault_args=fault_args,
+                            fault_pattern_args=fault_pattern_args)
                         self.faults.append(injector)
                     # TODO document our yml fault format
                 else:
                     log.warn(f"Fault type unknown:'{fault_type_value}'\n")
-
 
     def _get_target_arguments_from_fault_dict(self, fault_dict):
         if 'target_traffic' in fault_dict:
@@ -350,10 +374,6 @@ class FaultInjector():
         return fault_target_traffic, fault_target_protocol, src_port, dst_port
 
 
-def entrypoint_for_fault_controller(mininet_agnostic_faultconfig:dict, recv_pipe, send_pipe):
-
-    main_injector = FaultInjector(mininet_agnostic_faultconfig, recv_pipe, send_pipe)
+def entrypoint_for_fault_controller(mininet_agnostic_faultconfig: dict, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
+    main_injector = FaultInjector(mininet_agnostic_faultconfig, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet)
     main_injector.wait_until_go()
-
-
-

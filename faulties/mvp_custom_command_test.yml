@@ -8,7 +8,7 @@ faults:
       type_args: ['echo "static on $(date)" >> custom_node_command_test.txt', 'echo "off $(date)" >> custom_node_command_test.txt']
       identifiers: 
         - "h1"
-      pattern: "static"  # user-provided, "burst", "degradation", 'static
+      pattern: "static"
   - node_fault:
       pre_injection_time: 10
       injection_time: 10

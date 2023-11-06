@@ -140,7 +140,6 @@ async def inject(net: Mininet):
     # filepath = ("/home/containernet/containernet/faulties/mvp.yml") # TODO
     # filepath = "/home/containernet/containernet/faulties/mvp_stress-ng_test.yml"
     filepath = "/home/containernet/containernet/faulties/mvp_custom_command_test.yml"
-    # TODO up next: Get node injector to run
     faultcontroller = FaultControllerStarter(net, filepath)
     faultcontroller.go()
 
@@ -159,18 +158,30 @@ def linearBandwidthTest(lengths):
     topo = LinearTestTopo(hostCount)
 
     Switch = OVSKernelSwitch
-    # link = partial(TCLink, delay='30ms', bw=100) # TODO this requires custom re-building + injection logic
+
    #  net = Mininet(topo=topo, switch=Switch,
    #               controller=Controller, link=Link,
     #              waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
 
+
+    fault_filepath = "/home/containernet/containernet/faulties/mvp_custom_command_test.yml"
     host = custom(CPULimitedHost, cpu=.1)
     net = Mininet(topo=topo, switch=Switch,
                   controller=Controller, link=Link, host=host,
-                  waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
+                  waitConnected=True, faultFilepath=fault_filepath)
+
+    lg.setLogLevel('debug')
     net.start()
-    asyncio.run(inject(net))
+    # the fault controller is actually active
+    while net.faultController.is_active():
+        log.info("Fault controller is active\n")
+
+    log.info("Fault controller is not active")
     net.stop()
+
+   # asyncio.run(inject(net))
+
+    # link = partial(TCLink, delay='30ms', bw=100) # TODO this requires custom re-building + injection logic
 
 
 if __name__ == '__main__':
