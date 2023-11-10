@@ -313,9 +313,9 @@ class FaultInjector():
                         node_process_pid = identifier_tuple[0]
 
                         corresponding_interface_name = identifier_tuple[3]
-                        corresponding_interface_name = [corresponding_interface_name]  # Injector expects array of nics
+                        corresponding_interface_name = corresponding_interface_name
                         # TODO probably refactor that
-                        injector = Injector(target_nics=corresponding_interface_name,
+                        injector = Injector(target_interface=corresponding_interface_name,
                                             target_namespace_pid=node_process_pid,
 
                                             fault_target_traffic=fault_target_traffic,
