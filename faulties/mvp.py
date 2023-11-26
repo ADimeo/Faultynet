@@ -215,10 +215,7 @@ def linearBandwidthTest(lengths):
     topo = LinearTestTopo()
     Switch = OVSKernelSwitch
 
-    # This is without fault injection
-    # net = Mininet(topo=topo, switch=Switch,
-    #               controller=Controller, link=Link,
-    #               waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
+
 
 
     # This is with fault injection
