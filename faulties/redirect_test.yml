@@ -1,0 +1,13 @@
+---
+faults:
+  - link_fault: # This one should succeed
+      pre_injection_time: 8
+      injection_time: 8
+      post_injection_time: 3
+      type: "link_fault:redirect"
+      type_args: ["s1->h3", "redirect"]
+      identifiers:
+        - "s1->h1"
+      pattern: "persistent"  # user-provided, "burst", "degradation"
+      pattern_args: [500,1000] # burst length/period in ms
+...

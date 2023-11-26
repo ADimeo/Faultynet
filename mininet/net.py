@@ -649,8 +649,6 @@ class Mininet( object ):
         info( '\n' )
         if self.waitConn:
             self.waitConnected( self.waitConn )
-        print("YEEEEHAW")
-        print("OI " + self.faultFilepath)
         if self.faultFilepath:
             self.faultController = FaultControllerStarter(self, self.faultFilepath)
             self.faultController.go()

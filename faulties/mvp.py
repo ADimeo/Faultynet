@@ -19,7 +19,6 @@ from mininet.log import lg, info
 from mininet import log
 from mininet.util import irange, quietRun, custom
 from mininet.link import Link
-from mininet.faultcontrollerstarter import FaultControllerStarter
 
 flush = sys.stdout.flush
 
@@ -42,17 +41,18 @@ class CgroupTestTopo(Topo):
 class LinearTestTopo(Topo):
     "Topology for a string of N hosts and N-1 switches."
     # pylint: disable=arguments-differ
-    def build(self, N, **params):
+    def build(self, N=0, **params):
         # Create switches and hosts
         h1 = self.addHost('h1')
-
         h2 = self.addHost('h2')
-        switch = self.addSwitch('s1')
+        h3 = self.addHost('h3')
 
+
+        switch = self.addSwitch('s1')
 
         self.addLink(h1, switch)
         self.addLink(h2, switch)
-        # Wire up switches
+        self.addLink(h3, switch)
 
 
 async def cgroup_test_commands(net: Mininet):
@@ -86,8 +86,86 @@ async def cgroup_test_commands(net: Mininet):
     time.sleep(5)
     log.info("Done")
 
-    # TODO continue here - think about how to propagate a cpu injection (or node injection) through the system
 
+
+async def degradation_command_test(net: Mininet):
+    # Runs with degradation_test.yml
+    lg.setLogLevel('debug')
+    h1 = net.hosts[0]
+    # h1.cmd("ip a") 10.0.0.1
+    h2 = net.hosts[1]
+    # h2.cmd("ip a") 10.0.0.2
+    s1 = net.switches[0]
+    await asyncio.sleep(6)
+    s1.cmd("sudo tc qdisc show dev s1-eth1 root > degradation_interface_status 2>&1")
+    h1.cmd("ping -i 0.2 -w 10 10.0.0.2 > degradation_test_file.txt 2>&1") # expect that that indicates packet loss
+
+async def redirect_command_test(net: Mininet):
+    # run with redirect_test.yml"
+    lg.setLogLevel('debug')
+    h1 = net.hosts[0]
+    #h1.cmd("ip a") 10.0.0.1
+    h2 = net.hosts[1]
+    #h2.cmd("ip a") 10.0.0.2
+    h3 = net.hosts[2]
+    #h3.cmd("ip a") 10.0.0.3
+    s1 = net.switches[0]
+
+    # Activate faults, redirect traffic from s1:h1 to s1:h3
+    log.info(s1.cmd("timeout 5 tcpdump -i s1-eth3 -w pcap_s1-h3-pre.pcap&") + "\n")
+    await asyncio.sleep(2)
+    log.info("Running ping without injection...\n")
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > no_redirect_injected.txt 2>&1") + "\n")
+    h1.cmd("timeout 3 ping -i 0.2 10.0.0.2") # between h1 and h2
+
+    await asyncio.sleep(4)
+    log.info("Running ping with injection now...\n")
+    log.info(h1.cmd("timeout 5 tcpdump -i h1-eth0 -w pcap_h1-s1-post.pcap&") + "\n")
+    # log.info(s1.cmd("timeout 5 tcpdump -i s1-eth1 -w pcap_s1-h1-post.pcap&") + "\n") # It's this motherfucking line
+    log.info(s1.cmd("timeout 5 tcpdump -i s1-eth3 -w pcap_s1-h3-post.pcap&") + "\n")
+
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > yes_redirect_injected.txt 2>&1") + "\n")
+    h1.cmd("timeout 4 ping -i 0.2 10.0.0.2") # between h1 and h2
+    await asyncio.sleep(4)
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > post_redirect_removal.txt 2>&1") + "\n")
+
+
+async def redirect_single_protocol_test(net: Mininet):
+    # run with protocol_redirect_test.yml"
+    # Should redirect ping traffic (ICMP), but not ping6 traffic (UPv6-ICMP)
+    lg.setLogLevel('debug')
+    h1 = net.hosts[0]
+    # h1.cmd("ip a") #10.0.0.1
+    h2 = net.hosts[1]
+    # h2.cmd("ip a") #10.0.0.2
+    h3 = net.hosts[2]
+    # h3.cmd("ip a") #10.0.0.3
+    s1 = net.switches[0]
+
+    # add IPv6 addresses
+    h1.cmd("ifconfig h1-eth0 inet6 add fc00::1/64")
+    h2.cmd("ifconfig h2-eth0 inet6 add fc00::2/64")
+    h3.cmd("ifconfig h3-eth0 inet6 add fc00::3/64")
+
+    log.info(s1.cmd("sudo /usr/sbin/tc qdisc show dev s1-eth1 > qdis1.txt 2>&1") + "\n")
+
+
+    # Wait for faults to activate
+    await asyncio.sleep(4)
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > config_icmp_redirect_only.txt 2>&1") + "\n")
+    log.info(s1.cmd("sudo /usr/sbin/tc qdisc show dev s1-eth1 > qdisc_icmp_redirect_only.txt 2>&1") + "\n")
+
+    log.info(h1.cmd("timeout 16 tcpdump -i h1-eth0 -w pcap_h1-s1-post.pcap&") + "\n")
+    log.info(s1.cmd("timeout 16 tcpdump -i s1-eth3 -w pcap_s1-h3-post.pcap&") + "\n")
+    await asyncio.sleep(1)
+    log.info("Running ping IPv4 (expecting redirect)\n")
+    h1.cmd("timeout 5 ping -6 -i 0.2 fc00::2")  # between h1 and h2
+    log.info("Running ping IPv4 (expecting no redirect)\n")
+    h1.cmd("timeout 5 ping -i 0.2 10.0.0.2")  # between h1 and h2
+
+
+    await asyncio.sleep(4)
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > post_redirect_removal.txt 2>&1") + "\n")
 
 
 async def run_test_commands(net: Mininet):
@@ -128,58 +206,40 @@ async def run_test_commands(net: Mininet):
     log.info("Waiting for fault engine to shut down\n")
 
 
-
-async def inject(net: Mininet):
-    log.info("The net is a faulty boy\n")
-    lg.setLogLevel('debug')
-
-    filepath = ("/home/containernet/containernet/faulties/mvp.yml") # TODO
-
-
-
-    # filepath = ("/home/containernet/containernet/faulties/mvp.yml") # TODO
-    # filepath = "/home/containernet/containernet/faulties/mvp_stress-ng_test.yml"
-    filepath = "/home/containernet/containernet/faulties/mvp_custom_command_test.yml"
-    faultcontroller = FaultControllerStarter(net, filepath)
-    faultcontroller.go()
-
-    await run_test_commands(net)
-
-
-    log.info("Test done, injections done, preparing for teardown\n")
-
 def linearBandwidthTest(lengths):
     "Check bandwidth at various lengths along a switch chain."
     results = {}
-    switchCount = max(lengths)
-    hostCount = switchCount + 1
-
-
-    topo = LinearTestTopo(hostCount)
-
+    # fault_filepath = "/home/containernet/containernet/faulties/degradation_test.yml"
+    fault_filepath = "/home/containernet/containernet/faulties/redirect_test.yml"
+    fault_filepath = "/home/containernet/containernet/faulties/protocol_redirect_test.yml"
+    topo = LinearTestTopo()
     Switch = OVSKernelSwitch
 
-   #  net = Mininet(topo=topo, switch=Switch,
-   #               controller=Controller, link=Link,
-    #              waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
+    # This is without fault injection
+    # net = Mininet(topo=topo, switch=Switch,
+    #               controller=Controller, link=Link,
+    #               waitConnected=True) # TODO Mininet() should be allowed to create a faultcontroler
 
 
-    fault_filepath = "/home/containernet/containernet/faulties/mvp_custom_command_test.yml"
+    # This is with fault injection
     host = custom(CPULimitedHost, cpu=.1)
     net = Mininet(topo=topo, switch=Switch,
-                  controller=Controller, link=Link, host=host,
-                  waitConnected=True, faultFilepath=fault_filepath)
+                   controller=Controller, link=Link, host=host,
+                   waitConnected=True, faultFilepath=fault_filepath)
 
     lg.setLogLevel('debug')
     net.start()
+
+    # asyncio.run(degradation_command_test(net))
+    asyncio.run(redirect_single_protocol_test(net))
     # the fault controller is actually active
     while net.faultController.is_active():
-        log.info("Fault controller is active\n")
+        continue
 
     log.info("Fault controller is not active")
     net.stop()
 
-   # asyncio.run(inject(net))
+    # asyncio.run(inject(net))
 
     # link = partial(TCLink, delay='30ms', bw=100) # TODO this requires custom re-building + injection logic
 

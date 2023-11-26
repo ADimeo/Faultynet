@@ -32,7 +32,7 @@ class Injector:
                  fault_target_dst_ports=None,  # ???
                  fault_target_src_ports=None,  # ???
                  fault_type=None,  # user-provided, "delay", "persistent", "bottleneck", "down", "deletion", duplicate
-                    # Netem allows [ LIMIT ] [ DELAY ] [ LOSS ] [ CORRUPT ] [ DUPLICATION] [ REORDERING ] [ RATE ] [ SLOT ]
+                 # Netem allows [ LIMIT ] [ DELAY ] [ LOSS ] [ CORRUPT ] [ DUPLICATION] [ REORDERING ] [ RATE ] [ SLOT ]
                  fault_pattern=None,  # user-provided, "burst", "degradation"
                  fault_pattern_args=None,  # user-provided
                  fault_args=None,  # user-provided: how harsh failure is
@@ -270,8 +270,14 @@ class Injector:
             "[make_nics_injection_command] CONFIG: device %s, fault_type %s, fault_pattern %s, fault_pattern_args %s, fault_args %s, tc_cmd %s\n"
             % (device, fault_type, fault_pattern, fault_pattern_args, fault_args, tc_cmd))
 
-        base_command = 'nsenter --target ' + str(
-            node_pid) + ' --net  ' + tc_path + '/tc qdisc ' + tc_cmd + ' dev ' + device + ' root netem '
+        if node_pid is None:
+            # Node is not in a network namespace, so base command doesn't need to enter a namespace
+            base_command_tc = tc_path + "/tc "
+        else:
+            base_command_tc = 'nsenter --target ' + str(node_pid) + ' --net ' + tc_path + "/tc "
+
+        base_qdisc_netem_command = base_command_tc + 'qdisc ' + tc_cmd + ' dev ' + device + ' root netem '
+        # base command is not used for redirects, since those don't use tc netem
         command = None
 
         # NOTE: for NODE_DOWN and NIC_DOWN fault type does not make sense the random fault_pattern.
@@ -281,24 +287,45 @@ class Injector:
             if 'delay' in fault_type:
                 # e.g., tc qdisc add dev tap0897f3c6-e0 root netem delay 50ms reorder 50%
                 random_perc = 100 - int(fault_pattern_args)
-                command = base_command + fault_type + ' ' + fault_args + ' reorder ' + str(random_perc) + '%'
-
+                command = base_qdisc_netem_command + fault_type + ' ' + fault_args + ' reorder ' + str(random_perc) + '%'
+            elif 'redirect' in fault_type:
+                log.error("Trying to inject redirect fault with randomness. This is not supported.\n")
+                command = ""
             else:
                 # in that case for corruption and loss we can use the 'fault_args' that already include random probability
-                command = base_command + fault_type + ' ' + fault_pattern_args + '%'
+                command = base_qdisc_netem_command + fault_type + ' ' + fault_pattern_args + '%'
 
         elif 'persistent' in fault_pattern:
             # Persistent fault type means setting a probability to 100%. For delay injection we can just use the default usage for 'delay' fault type
 
             if 'delay' in fault_type:
-                command = base_command + fault_type + ' ' + fault_args
+                command = base_qdisc_netem_command + fault_type + ' ' + fault_args
 
             elif 'bottleneck' in fault_type:
                 # the command is like: tc qdisc add dev tapa68bfef8-df root tbf rate 256kbit burst 1600 limit 3000
                 default_bottleneck_burst = '1600'
                 default_limit_burst = '3000'
-                command = 'nsenter --target ' + str(
-                    node_pid) + ' --net  ' + tc_path + '/tc qdisc ' + tc_cmd + ' dev ' + device + ' root tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst
+                command = (base_command_tc + ' qdisc ' + tc_cmd + ' dev ' \
+                           + device + ' root tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
+            elif 'redirect' in fault_type:
+                destination_interface = fault_args[0]
+                try:
+                    redirect_or_mirror = fault_args[1]
+                    if redirect_or_mirror not in ['mirror', 'redirect']:
+                        raise IndexError
+                except IndexError:
+                    redirect_or_mirror = 'redirect'
+
+                # We'll only ever have one of these per interface, so this static handle is fine
+                # This follows the man page examples
+                # add ingress qdisc first
+                if 'add' in tc_cmd:
+                    prep_command = base_command_tc + 'qdisc ' + tc_cmd + ' dev ' + device + ' handle ffff: ingress '
+                    command = base_command_tc + 'filter ' + tc_cmd + ' dev ' + device + ' parent ffff: matchall ' + \
+                            ' action mirred egress ' + redirect_or_mirror + ' dev ' + destination_interface # get parent
+                    command = prep_command + " ; " + command
+                elif 'del' in tc_cmd:
+                    command = base_command_tc + 'qdisc ' + tc_cmd + ' dev ' + device + ' ingress '
 
             elif 'down' in fault_type:
                 # TODO implement/test this
@@ -320,73 +347,100 @@ class Injector:
                         command = ifup_cmd + ' ' + device
             else:
                 # in that case for corruption and loss we can use the 'fault_args' to set 100% probability
-                command = base_command + fault_type + ' 100%'
+                command = base_qdisc_netem_command + fault_type + ' 100%'
+
         return command
 
-    def make_filter_cmds(self, node_pid, fault_pattern, fault_pattern_args, fault_type, fault_args, device,
-                         target_protocol,
-                         target_dst_ports=None, target_src_ports=None, enable=False):
+    def make_filtered_nics_injection_command(self, node_pid, fault_pattern, fault_pattern_args, fault_type, fault_args,
+                                             device,
+                                             target_protocol,
+                                             target_dst_ports=None, target_src_ports=None, enable=False):
 
         log.debug(
             "[make_filter_cmds] CONFIG: fault_pattern %s, fault_pattern_args %s, fault_type %s, fault_args %s, device %s, target_protocol %s, target_dst_ports %s, target_src_ports %s, enable %s\n"
             % (fault_pattern, fault_pattern_args, fault_type, fault_args, device, target_protocol, target_dst_ports,
                target_src_ports, enable))
 
-        if enable:
-            base_command = 'nsenter --target ' + str(
-                node_pid) + ' --net  ' + tc_path + '/tc filter add dev ' + device + ' parent 1:0 protocol ip prio 1 u32 '
-            cmd_list = [tc_path + '/tc qdisc add dev ' + device + ' root handle 1: prio']
+        if node_pid is None:
+            # Node is not in a network namespace, so base command doesn't need to enter a namespace
+            base_command_tc = tc_path + "/tc "
+        else:
+            base_command_tc = 'nsenter --target ' + str(node_pid) + ' --net ' + tc_path + "/tc "
 
+        if enable:
+            if 'redirect' in fault_type:
+                # We need to work with the ingress qdisc instead of the default one, so add that one instead
+                # almost the same as prep_command from redirect of all protocols
+                cmd_list = [base_command_tc + 'qdisc add dev ' + device + ' handle ffff: ingress ']
+                # For some reason using handle 1: ingress still leads to a ffff handle
+                # (tc qdisc show dev s1-eth1 gives output of qdisc ingress ffff: parent ffff:fff1)
+                # I'm not completely sure why?
+            else:
+                cmd_list = [base_command_tc + 'qdisc add dev ' + device + ' root handle 1: prio']
+
+            base_qdisc_netem_command = base_command_tc + 'filter add dev ' + device + ' parent 1:0 protocol ip prio 1 u32 '
             target_protocol_cmd = 'match ip protocol ' + self.target_protocol_table[target_protocol] + ' 0xff'
 
+            # redirect needs no special case here, since these are added to the qdisc as defined by tag
             if target_dst_ports:
                 for target_port in target_dst_ports:
                     target_port_cmd = 'match ip dport ' + str(target_port) + ' 0xffff'
-                    cmd_list.append(base_command + target_protocol_cmd + ' ' + target_port_cmd + ' flowid 1:1')
+                    cmd_list.append(base_qdisc_netem_command + target_protocol_cmd + ' ' + target_port_cmd + ' flowid 1:1')
             if target_src_ports:
                 for target_port in target_src_ports:
                     target_port_cmd = 'match ip sport ' + str(target_port) + ' 0xffff'
-                    cmd_list.append(base_command + target_protocol_cmd + ' ' + target_port_cmd + ' flowid 1:1')
+                    cmd_list.append(base_qdisc_netem_command + target_protocol_cmd + ' ' + target_port_cmd + ' flowid 1:1')
             else:
-                cmd_list.append(base_command + target_protocol_cmd + ' flowid 1:1')
+                cmd_list.append(base_qdisc_netem_command + target_protocol_cmd + ' flowid 1:1')
 
             # enable fault injection
             if 'random' in fault_pattern:
                 if 'delay' in fault_type:
                     # e.g., tc qdisc add dev tap0897f3c6-e0 root netem delay 50ms reorder 50%
                     random_perc = 100 - int(fault_pattern_args)
-                    cmd_list.append(
-                        'nsenter --target ' + str(
-                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_args + ' reorder ' + str(
+                    cmd_list.append(base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_args + ' reorder ' + str(
                             random_perc) + '%')
                 else:
-                    cmd_list.append(
-                        'nsenter --target ' + str(
-                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_pattern_args + '%')
+                    cmd_list.append(base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_pattern_args + '%')
             elif 'persistent' in fault_pattern:
                 if 'bottleneck' in fault_type:
                     # the command is like: tc qdisc add dev tapa68bfef8-df root tbf rate 256kbit burst 1600 limit 3000
                     default_bottleneck_burst = '1600'
                     default_limit_burst = '3000'
-                    cmd_list.append(
-                        'nsenter --target ' + str(
-                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
+                    cmd_list.append(base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
+                elif 'redirect' in fault_type:
+                    destination_interface = fault_args[0]
+                    try:
+                        redirect_or_mirror = fault_args[1]
+                        if redirect_or_mirror not in ['mirror', 'redirect']:
+                            raise IndexError
+                    except IndexError:
+                        redirect_or_mirror = 'redirect'
+                    # We modify the commands already in the cmd_list, and add the redirect action to them
+                    append_string = ' action mirred egress ' + redirect_or_mirror + ' dev ' + destination_interface
+                    new_cmd_list = []
+                    for cmd in cmd_list:
+                        if 'match' in cmd:
+                            command_with_corrected_id = cmd.replace('parent 1:0', 'parent ffff:')
+                            new_cmd_list.append(command_with_corrected_id + append_string)
+                        else:
+                            new_cmd_list.append(cmd)
+                    cmd_list = new_cmd_list
 
                 else:
                     if 'delay' in fault_type:
-                        tc_arg = fault_args
+                        tc_arg = str(fault_args[0])
                     else:
                         tc_arg = '100%'
-
                     cmd_list.append(
-                        'nsenter --target ' + str(
-                            node_pid) + ' --net  ' + tc_path + '/tc qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + tc_arg)
-
+                        base_command_tc + ' qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + tc_arg)
         else:
             cmd_list = []
-            cmd_list.append(
-                'nsenter --target ' + str(
-                    node_pid) + ' --net  ' + tc_path + '/tc qdisc del dev ' + device + ' root handle 1: prio')
+            if 'redirect' in fault_type:
+                # We added a different queue, so we need to delete a different one
+                cmd_list.append(base_command_tc + 'qdisc del dev ' + device + ' ingress ')
+            else:
+                cmd_list.append(base_command_tc + ' qdisc del dev ' + device + ' root handle 1: prio')
 
         log.debug("cmd_list generated => %s\n" % cmd_list)
 
@@ -453,22 +507,26 @@ class Injector:
             # Inject into only specific protocols
             cmd_list = []
             if enable:
-                cmd_list = self.make_filter_cmds(node_pid, fault_pattern, fault_pattern_args[0], fault_type, fault_args,
-                                                 device,
-                                                 target_protocol, target_dst_ports, target_src_ports, True)
+                cmd_list = self.make_filtered_nics_injection_command(node_pid, fault_pattern, fault_pattern_args[0],
+                                                                     fault_type, fault_args,
+                                                                     device,
+                                                                     target_protocol, target_dst_ports,
+                                                                     target_src_ports, True)
             else:
-                cmd_list = self.make_filter_cmds(node_pid, fault_pattern, fault_pattern_args[0], fault_type, fault_args,
-                                                 device,
-                                                 target_protocol, target_dst_ports, target_src_ports, False)
+                cmd_list = self.make_filtered_nics_injection_command(node_pid, fault_pattern, fault_pattern_args[0],
+                                                                     fault_type, fault_args,
+                                                                     device,
+                                                                     target_protocol, target_dst_ports,
+                                                                     target_src_ports, False)
 
             for command in cmd_list:
                 log.debug("Execute command in namespace for process %s: '%s'\n" % (node_pid, command))
 
                 retcode = call(command, shell=True)  # TODO call the relevant hosts command instead
                 if retcode < 0:
-                    log.debug("Command '%s' was terminated not correctly (recode %s)" % (command, -retcode))
+                    log.debug("Command '%s' was terminated not correctly (recode %s)\n" % (command, -retcode))
                 else:
-                    log.debug("Command '%s' was terminated correctly (retcode %s)" % (command, retcode))
+                    log.debug("Command '%s' was terminated correctly (retcode %s)\n" % (command, retcode))
 
 
 class NodeInjector:
@@ -561,7 +619,7 @@ class NodeInjector:
                 await asyncio.sleep(burst_period - burst_duration)
 
         elif self.fault_type == 'stress_cpu':
-            burst_config = self.fault_pattern_args 
+            burst_config = self.fault_pattern_args
             burst_duration = int(max(1, burst_config[0] / 1000))
             burst_period = int(burst_config[1]) / 1000  # after each burst, wait for (burst_period - burst_duration)
             burst_num = int(self.injection_time / burst_period)  # how often we burst

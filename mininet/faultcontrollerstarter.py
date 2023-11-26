@@ -39,6 +39,9 @@ class FaultControllerStarter(object):
         config = self._get_base_config_dict(filepath_to_config_file)
         agnostic_config = self._build_yml_with_mininet_agnostic_identifiers(self.net_reference, config)
 
+
+
+
         recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults = Pipe()
         recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet = Pipe()
         fault_process = Process(target=entrypoint_for_fault_controller, args=(agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet))
@@ -83,7 +86,7 @@ class FaultControllerStarter(object):
 
 
     def _build_yml_with_mininet_agnostic_identifiers(self, net: 'Mininet', yml_config: dict) -> dict:
-        for fault_object in yml_config.get("faults"):
+        for i, fault_object in enumerate(yml_config.get("faults")):
             # We expect a single key here, either link_fault or node_fault
             # Right now we don't care which one it is, so just get the first key
             fault_type = list(fault_object.keys())[0]
@@ -96,6 +99,20 @@ class FaultControllerStarter(object):
                     net, identifier_string)
                 new_identifier_strings.append((repr(node_identifying_tuple)))
             fault_dict['identifiers'] = new_identifier_strings
+
+            # If it's a 'redirect' fault, we also need to enrich the redirect-to interface, in the fault_type_args
+            if fault_dict.get('type') == "link_fault:redirect":
+                fault_type_args = fault_dict.get("type_args")
+                potential_interface_name = fault_type_args[0]
+
+                # it's either the interface name, or in the node->node (or node->node:interface) pattern
+                need_to_extract_interface_name = self._is_string_in_arrow_pattern(net, potential_interface_name)
+                if need_to_extract_interface_name:
+                    interface_name, _ = self._get_node_and_interface_name_from_identifier_string(net, potential_interface_name)
+                else:
+                    interface_name = potential_interface_name
+
+                yml_config['faults'][i]['link_fault']['type_args'][0] = interface_name
 
         return yml_config
         # TODO document our yml fault format
@@ -118,6 +135,18 @@ class FaultControllerStarter(object):
             corresponding_interface_name, corresponding_host)
         return process_group_id, net_namespace_identifier, cgroup, interface_name
 
+
+    @staticmethod
+    def _is_string_in_arrow_pattern(net: 'Mininet', identifier_string) -> bool:
+        implicit_link_regex = "^(\w*)->(\w*)$"  # matches "host_name->host_name"
+        explicit_link_regex = "^(\w*)->(\w*):(\w*)$"  # matches "host_name->host_name:interface_name", useful if more than one link exists
+        if match := re.match(implicit_link_regex, identifier_string):
+            return True
+        elif match := re.match(explicit_link_regex, identifier_string):
+            return True
+        else:
+            return False
+
     @staticmethod
     def _get_node_and_interface_name_from_identifier_string(net: 'Mininet', identifier_string) -> (str, Node):
         # These patterns are expected for link_fault s
@@ -134,6 +163,7 @@ class FaultControllerStarter(object):
             explicit_name = match.groups()[2]
         else:
             # The identifier is in node pattern, so just the name of the node, no interface required.
+            # Used for node injections, where there is no interface/second node
             nodename_a = identifier_string
             nodename_b = None
 
@@ -333,7 +363,7 @@ class FaultInjector():
                                             post_injection_time=post_injection_time)
                         self.faults.append(injector)
                     # TODO document our yml fault format
-                if match := re.match(node_fault_regex, fault_type_value):
+                elif match := re.match(node_fault_regex, fault_type_value):
                     fault_type = match.groups()[0]
                     # target_nics, target_node
                     for identifier_string in fault_dict.get("identifiers"):

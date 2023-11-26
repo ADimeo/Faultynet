@@ -1,0 +1,14 @@
+---
+faults:
+  - link_fault:
+      pre_injection_time: 5
+      injection_time: 10
+      post_injection_time: 5
+      type: "link_fault:loss"
+      type_args: ['50']
+      identifiers: 
+        - "h1->s1"
+        - "s1->h1"
+      pattern: "degradation"  # user-provided, "burst", "degradation"
+      pattern_args: ['5']
+...
