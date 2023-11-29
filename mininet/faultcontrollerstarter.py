@@ -4,7 +4,8 @@ Yeah there'll defs be documentation here, but right now that's TODO
 import asyncio
 import re
 import subprocess
-import time
+import atexit
+import uuid
 
 from ast import literal_eval
 from multiprocessing import Pipe, Process
@@ -12,6 +13,7 @@ from multiprocessing import Pipe, Process
 import yaml
 
 from mininet import log
+from mininet.faultlogger import FaultLogger
 from mininet.node import Node
 from mininet.thorfi_injector.injector_agent import Injector, NodeInjector
 
@@ -19,6 +21,7 @@ MESSAGE_SETUP_DONE = "m_faultinjector_ready"
 MESSAGE_SETUP_ERROR = "m_faultinjector_setuperror"
 MESSAGE_START_INJECTING = "m_faultinjector_go"
 MESSAGE_INJECTION_DONE = "m_faultinjector_done"
+MESSAGE_WRITE_LOGS = "m_write_logs"
 
 
 class FaultControllerStarter(object):
@@ -60,6 +63,7 @@ class FaultControllerStarter(object):
         log.info("Initiating faults\n")
         self.faults_are_active = True
         self.send_pipe_mininet_to_faults.send_bytes(MESSAGE_START_INJECTING.encode())
+        atexit.register(notify_to_write_to_logfile, self.send_pipe_mininet_to_faults)
 
     def is_active(self):
         if not self.faults_are_active:
@@ -254,6 +258,7 @@ class FaultInjector():
         self.config = agnostic_config
         self.faults = []  # set in configByFile
         self.total_runtime = 0
+        self.fault_logger = None  # set in config_logger
 
         self.recv_pipe_mininet_to_faults = recv_pipe_mininet_to_faults
         self.send_pipe_mininet_to_faults = send_pipe_mininet_to_faults
@@ -261,7 +266,8 @@ class FaultInjector():
         self.recv_pipe_faults_to_mininet = recv_pipe_faults_to_mininet
         self.send_pipe_faults_to_mininet = send_pipe_faults_to_mininet
 
-        self._configByFile(self.config)  # TODO: Change config_by_file to be mininet agnostic
+        self._configByFile(self.config)
+        self._config_logger(self.config)
 
         log.debug("FI: Sending setup finished command\n")
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_SETUP_DONE.encode())
@@ -278,11 +284,32 @@ class FaultInjector():
         fault_coroutines = []
         for i in self.faults:
             fault_coroutines.append(i.go())
+        log_task = asyncio.create_task(self.fault_logger.go())
         log.debug("All faults scheduled.\n")
+        log_task_activator = self.listen_for_log_write()
 
         await asyncio.gather(*fault_coroutines)
-        # All faults have finished injecting, so send the "done" message
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_INJECTION_DONE.encode())
+        self.fault_logger.stop()
+        await log_task
+        await log_task_activator
+        # All faults have finished injecting, so send the "done" message
+
+    async def listen_for_log_write(self):
+        while not self.recv_pipe_mininet_to_faults.poll():
+            continue
+        potential_go_message = self.recv_pipe_mininet_to_faults.recv_bytes()
+        if potential_go_message == MESSAGE_WRITE_LOGS.encode():
+            self.fault_logger.write_log_to_file()
+        else:
+            log.error("Received unexpected message while waiting for log-to-file message\n")
+
+    def _config_logger(self, config):
+        log_config = config.get("log")
+        interval = int(log_config["interval"])
+        path = log_config["path"]
+        fault_logger = FaultLogger(interval=interval, log_filepath=path)
+        self.fault_logger = fault_logger
 
     def _configByFile(self, config):
         """Reconfigures this controller according to the given file """
@@ -299,6 +326,10 @@ class FaultInjector():
 
             # type, pattern, type_arg, pattern_arg
             fault_args = fault_dict.get('type_args', None)  # TODO handle absence gracefully
+            tag = str(fault_dict.get('tag', None))
+            if tag is None:
+                tag = str(uuid.uuid4())
+
 
             fault_pattern = fault_dict.get('pattern', 'persistent')
             fault_pattern_args = fault_dict.get('pattern_args', None)  # TODO handle absence gracefully
@@ -330,6 +361,7 @@ class FaultInjector():
                         # TODO probably refactor that
                         injector = Injector(target_interface=corresponding_interface_name,
                                             target_namespace_pid=node_process_pid,
+                                            tag=tag,
 
                                             fault_target_traffic=fault_target_traffic,
                                             fault_target_protocol=fault_target_protocol,
@@ -387,6 +419,13 @@ class FaultInjector():
         return fault_target_traffic, fault_target_protocol, src_port, dst_port
 
 
-def entrypoint_for_fault_controller(mininet_agnostic_faultconfig: dict, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
-    main_injector = FaultInjector(mininet_agnostic_faultconfig, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet)
+def entrypoint_for_fault_controller(mininet_agnostic_faultconfig: dict, recv_pipe_mininet_to_faults,
+                                    send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet,
+                                    send_pipe_faults_to_mininet):
+    main_injector = FaultInjector(mininet_agnostic_faultconfig, recv_pipe_mininet_to_faults,
+                                  send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet)
     main_injector.wait_until_go()
+
+
+def notify_to_write_to_logfile(pipe):
+    pipe.send_bytes(MESSAGE_WRITE_LOGS.encode())

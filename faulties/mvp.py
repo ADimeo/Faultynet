@@ -212,6 +212,7 @@ def linearBandwidthTest(lengths):
     # fault_filepath = "/home/containernet/containernet/faulties/degradation_test.yml"
     fault_filepath = "/home/containernet/containernet/faulties/redirect_test.yml"
     fault_filepath = "/home/containernet/containernet/faulties/protocol_redirect_test.yml"
+    fault_filepath = "/home/containernet/containernet/faulties/mvp.yml"
     topo = LinearTestTopo()
     Switch = OVSKernelSwitch
 
@@ -228,7 +229,7 @@ def linearBandwidthTest(lengths):
     net.start()
 
     # asyncio.run(degradation_command_test(net))
-    asyncio.run(redirect_single_protocol_test(net))
+    # asyncio.run(redirect_single_protocol_test(net))
     # the fault controller is actually active
     while net.faultController.is_active():
         continue

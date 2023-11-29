@@ -10,6 +10,8 @@ from mininet import log
 
 from subprocess import call
 
+from mininet.faultlogger import FaultLogger
+
 tc_path = '/usr/sbin'  # TODO make this refer to a binary we have in our download
 
 
@@ -18,6 +20,7 @@ class Injector:
     def __init__(self,
                  target_interface=None,  # user-provided. Interfaces, like eth0. Expects a list
                  target_namespace_pid=None,
+                 tag=None,
                  # user-provided, pid of the main node shell we should inject on
                  fault_target_traffic=None,
                  # user-provided, if fault target is not ANY_TRAFFIC generate cmds for injecting according to protocol
@@ -42,6 +45,7 @@ class Injector:
 
         self.target_interface = target_interface
         self.namespace_pid = target_namespace_pid
+        self.tag = tag
 
         self.fault_target_traffic = fault_target_traffic
         self.fault_target_protocol = fault_target_protocol
@@ -450,6 +454,11 @@ class Injector:
 
             log.debug("Execute command in namespace for process  %s: '%s'\n" % (node_pid, command))
             retcode = call(command, shell=True)
+            if enable:
+                FaultLogger.set_fault_active(self.tag, self.fault_type, command, retcode)
+            else:
+                FaultLogger.set_fault_inactive(self.tag)
+
             if retcode < 0:
                 log.debug("Command '%s' was terminated not correctly (recode %s)\n" % (command, -retcode))
             else:
@@ -475,7 +484,12 @@ class Injector:
             for command in cmd_list:
                 log.debug("Execute command in namespace for process %s: '%s'\n" % (node_pid, command))
 
-                retcode = call(command, shell=True)  # TODO call the relevant hosts command instead
+                retcode = call(command, shell=True)
+                if enable:
+                    FaultLogger.set_fault_active(self.tag, self.fault_type, command, retcode)
+                else:
+                    FaultLogger.set_fault_inactive(self.tag)
+
                 if retcode < 0:
                     log.debug("Command '%s' was terminated not correctly (recode %s)\n" % (command, -retcode))
                 else:
@@ -485,6 +499,7 @@ class Injector:
 class NodeInjector:
     def __init__(self,
                  target_process_pid=None,  # This pid represents the "node" we want to run on
+                 tag=None,
                  fault_type=None,  # "stress", custom, ???
                  pre_injection_time=0,
                  injection_time=20,
@@ -495,6 +510,7 @@ class NodeInjector:
                  # We want mode - for defaults like a CPU stressor, but also custom commands
                  ):
         self.target_process_pid = target_process_pid
+        self.tag=tag
         self.fault_type = fault_type
         self.pre_injection_time = pre_injection_time
         self.injection_time = injection_time
@@ -527,10 +543,22 @@ class NodeInjector:
             log.error("Can't access cgroups information")
         return None
 
-    def execute_command_for_node(self, pid_of_node, command_to_execute):
+    def execute_command_for_node(self, pid_of_node, command_to_execute, enable):
+        if command_to_execute is None:
+            if enable:
+                FaultLogger.set_fault_active(self.tag, self.fault_type, "Dummy command, no action taken", 0)
+            else:
+                FaultLogger.set_fault_inactive(self.tag)
+            return
+
         base_command = f"nsenter --target {str(pid_of_node)} --net --pid --all "
         full_command = base_command + command_to_execute
         retcode = call(full_command, shell=True)
+        if enable:
+            FaultLogger.set_fault_active(self.tag, self.fault_type, command_to_execute, retcode)
+        else:
+            FaultLogger.set_fault_inactive(self.tag)
+
         if retcode < 0:
             log.debug("Command '%s' was terminated not correctly (recode %s)\n" % (full_command, -retcode))
         else:
@@ -566,9 +594,9 @@ class NodeInjector:
             end_command = self.fault_args[1]
 
             for _ in range(burst_num):
-                self.execute_command_for_node(self.target_process_pid, start_command)
+                self.execute_command_for_node(self.target_process_pid, start_command, True)
                 await asyncio.sleep(burst_duration)
-                self.execute_command_for_node(self.target_process_pid, end_command)
+                self.execute_command_for_node(self.target_process_pid, end_command, False)
                 await asyncio.sleep(burst_period - burst_duration)
 
         elif self.fault_type == 'stress_cpu':
@@ -584,7 +612,9 @@ class NodeInjector:
             stress_command = f"stress-ng -l {stress_percentage_applied_to_cgroup} -t {burst_duration} --cpu 1 --cpu-method decimal64"
 
             for _ in range(burst_num):
-                self.execute_command_for_node(self.target_process_pid, stress_command)
+                self.execute_command_for_node(self.target_process_pid, stress_command, True)
+                # Dummy call, to log that the command is likely done
+                self.execute_command_for_node(self.target_process_pid, None, False)
                 await asyncio.sleep(burst_period - burst_duration)
 
         # TODO handle else case
@@ -612,9 +642,9 @@ class NodeInjector:
                 start_command = start_base_command.format(injection_intensity)
                 end_command = end_base_command
 
-                self.execute_command_for_node(self.target_process_pid, start_command)
+                self.execute_command_for_node(self.target_process_pid, start_command, True)
                 await asyncio.sleep(step_duration)
-                self.execute_command_for_node(self.target_process_pid, end_command)
+                self.execute_command_for_node(self.target_process_pid, end_command, False)
 
                 injection_intensity = injection_intensity + step_size
                 test_duration += step_duration
@@ -633,8 +663,9 @@ class NodeInjector:
             injection_intensity = starting_stress_applied_to_cgroup
             while test_duration < self.injection_time:
                 stress_command = stress_base_command.format(injection_intensity, stress_step_duration)
-                self.execute_command_for_node(self.target_process_pid, stress_command)
+                self.execute_command_for_node(self.target_process_pid, stress_command, True)
                 injection_intensity = int(injection_intensity + (step_size_in_percent * cgroup_fraction))
+                self.execute_command_for_node(self.target_process_pid, None, False)
                 test_duration += stress_step_duration
                 # No need to sleep, command runs for as long as indicated
         # TODO handle else case
@@ -646,9 +677,9 @@ class NodeInjector:
 
             start_command = self.fault_args[0]
             end_command = self.fault_args[1]
-            self.execute_command_for_node(self.target_process_pid, start_command)
+            self.execute_command_for_node(self.target_process_pid, start_command, True)
             await asyncio.sleep(duration_in_seconds)
-            self.execute_command_for_node(self.target_process_pid, end_command)
+            self.execute_command_for_node(self.target_process_pid, end_command, False)
 
         elif self.fault_type == 'stress_cpu':
             # inject here
@@ -659,8 +690,12 @@ class NodeInjector:
             stress_percentage_applied_to_cgroup = int(cpu_stress_percentage * cgroup_fraction)
             duration_in_seconds = self.injection_time
             stress_base_command = f"stress-ng -l {stress_percentage_applied_to_cgroup} -t {duration_in_seconds} --cpu 1 --cpu-method decimal64"
-            self.execute_command_for_node(self.target_process_pid, stress_base_command)
+            self.execute_command_for_node(self.target_process_pid, stress_base_command, True)
             # No need to sleep, command runs for as long as indicated
+            # Dummy call to log that it's done
+            self.execute_command_for_node(self.target_process_pid, None, False)
+
+
         # TODO handle else case
 
     async def do_injection(self):
