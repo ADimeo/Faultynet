@@ -15,13 +15,6 @@ from mininet import log
 from mininet.node import Node
 from mininet.thorfi_injector.injector_agent import Injector, NodeInjector
 
-"""
-# TODO
-    - Note: Log saving?
-    - Note: What happens after _inject_? How about _recovery_?
-        - Specifically, supporting TcNodes is non-trivial
-"""
-
 MESSAGE_SETUP_DONE = "m_faultinjector_ready"
 MESSAGE_SETUP_ERROR = "m_faultinjector_setuperror"
 MESSAGE_START_INJECTING = "m_faultinjector_go"
@@ -39,12 +32,11 @@ class FaultControllerStarter(object):
         config = self._get_base_config_dict(filepath_to_config_file)
         agnostic_config = self._build_yml_with_mininet_agnostic_identifiers(self.net_reference, config)
 
-
-
-
         recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults = Pipe()
         recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet = Pipe()
-        fault_process = Process(target=entrypoint_for_fault_controller, args=(agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet))
+        fault_process = Process(target=entrypoint_for_fault_controller, args=(
+            agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet,
+            send_pipe_faults_to_mininet))
         fault_process.start()
 
         self.send_pipe_mininet_to_faults = send_pipe_mininet_to_faults
@@ -59,7 +51,6 @@ class FaultControllerStarter(object):
 
         if response == MESSAGE_SETUP_DONE.encode():
             log.debug("FaultController has signalled that it's ready\n")
-            # TODO we need to pass in some feedback, so probably not in the constructor method.
             return
         else:
             log.debug(f"FaultController has sent weird message: {response.decode()}\n")
@@ -84,7 +75,6 @@ class FaultControllerStarter(object):
 
         return True
 
-
     def _build_yml_with_mininet_agnostic_identifiers(self, net: 'Mininet', yml_config: dict) -> dict:
         for i, fault_object in enumerate(yml_config.get("faults")):
             # We expect a single key here, either link_fault or node_fault
@@ -108,7 +98,8 @@ class FaultControllerStarter(object):
                 # it's either the interface name, or in the node->node (or node->node:interface) pattern
                 need_to_extract_interface_name = self._is_string_in_arrow_pattern(net, potential_interface_name)
                 if need_to_extract_interface_name:
-                    interface_name, _ = self._get_node_and_interface_name_from_identifier_string(net, potential_interface_name)
+                    interface_name, _ = self._get_node_and_interface_name_from_identifier_string(net,
+                                                                                                 potential_interface_name)
                 else:
                     interface_name = potential_interface_name
 
@@ -128,13 +119,12 @@ class FaultControllerStarter(object):
 
     @staticmethod
     def _get_mininet_agnostic_identifiers_from_identifier_string(net: 'Mininet', identifier_string: str) -> (
-    int, str, str, str):
+            int, str, str, str):
         corresponding_interface_name, corresponding_host = FaultControllerStarter._get_node_and_interface_name_from_identifier_string(
             net, identifier_string)
         process_group_id, net_namespace_identifier, cgroup, interface_name = FaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
             corresponding_interface_name, corresponding_host)
         return process_group_id, net_namespace_identifier, cgroup, interface_name
-
 
     @staticmethod
     def _is_string_in_arrow_pattern(net: 'Mininet', identifier_string) -> bool:
@@ -167,7 +157,7 @@ class FaultControllerStarter(object):
             nodename_a = identifier_string
             nodename_b = None
 
-        # TODO create a lookup dict and update it when appropriate if this is a performance bottleneck
+        # Create a lookup dict and update it when appropriate if this is a performance bottleneck
         corresponding_interface_name = None
         corresponding_host = None
 
@@ -234,16 +224,11 @@ class FaultControllerStarter(object):
         net_ns_id = completed_process.stdout.split(' ')[0]
         net_namespace_identifier = net_ns_id
 
-        # except subprocess.CalledProcessError:
-        #     print("oh no")
-        #    # TODO handle process not found error
-        #    # This is weird, and potentially bad
-
         # control group
         # See https://docs.kernel.org/admin-guide/cgroup-v2.html#namespace for more information
         # as well as https://man.archlinux.org/man/cgroups.7
-        # Write to         / sys / fs / cgroup / cgroup_name / cgroup.procs
-        cgroup = None  # TOOD Continue here
+        # Write to  /sys/fs/cgroup/cgroup_name/cgroup.procs
+        cgroup = None
         path_to_process_cgroup = f"/proc/{process_id}/cgroup"
         cgroup_command = ["/usr/bin/cat", f"{path_to_process_cgroup}"]  # TODO make this binary part of the distribution
 
@@ -267,14 +252,14 @@ class FaultInjector():
     def __init__(self, agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults,
                  recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
         self.config = agnostic_config
-        self.faults = []
+        self.faults = []  # set in configByFile
         self.total_runtime = 0
 
         self.recv_pipe_mininet_to_faults = recv_pipe_mininet_to_faults
         self.send_pipe_mininet_to_faults = send_pipe_mininet_to_faults
 
         self.recv_pipe_faults_to_mininet = recv_pipe_faults_to_mininet
-        self.send_pipe_faults_to_mininet= send_pipe_faults_to_mininet
+        self.send_pipe_faults_to_mininet = send_pipe_faults_to_mininet
 
         self._configByFile(self.config)  # TODO: Change config_by_file to be mininet agnostic
 
@@ -286,8 +271,6 @@ class FaultInjector():
         potential_go_message = self.recv_pipe_mininet_to_faults.recv_bytes()
         if potential_go_message == MESSAGE_START_INJECTING.encode():
             asyncio.run(self.go())
-
-    # TODO do we need heartbeat/ability to kill this from the original process?
 
     async def go(self):
         log.debug("Initiating faults\n")

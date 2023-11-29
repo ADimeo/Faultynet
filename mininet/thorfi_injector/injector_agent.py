@@ -12,12 +12,6 @@ from subprocess import call
 
 tc_path = '/usr/sbin'  # TODO make this refer to a binary we have in our download
 
-"""Notes:
-
-- Question: How _smart_ is the injector? Specifically, who holds the timer-until-start? Injector, or management agent?
-    - Maybe go into phases, and within each phase there's autonomy, but the central controler pushes from phase to phase
-    """
-
 
 class Injector:
 
@@ -77,35 +71,20 @@ class Injector:
             'IPv6-ICMP': '58'
         }
 
-    def setTargetInterface(self, target_interface):
-        self.target_interface = target_interface
-
     def getTargetInterface(self):
         return self.target_interface
 
     def getFaultTargetTraffic(self):
         return self.fault_target_traffic
 
-    def setFaultTargetTraffic(self, fault_target_traffic):
-        self.fault_target_traffic = fault_target_traffic
-
     def getFaultTargetProtocol(self):
         return self.fault_target_protocol
-
-    def setFaultTargetProtocol(self, fault_target_protocol):
-        self.fault_target_protocol = fault_target_protocol
 
     def getFaultTargetDstPorts(self):
         return self.fault_target_dst_ports
 
-    def setFaultTargetDstPorts(self, fault_target_dst_ports):
-        self.fault_target_dst_ports = fault_target_dst_ports
-
     def getFaultTargetSrcPorts(self):
         return self.fault_target_src_ports
-
-    def setFaultTargetSrcPorts(self, fault_target_src_ports):
-        self.fault_target_src_ports = fault_target_src_ports
 
     def getFaultType(self):
         return self.fault_type
@@ -113,47 +92,21 @@ class Injector:
     def getFaultPattern(self):
         return self.fault_pattern
 
-    def setFaultPattern(self, fault_pattern):
-        self.fault_pattern = fault_pattern
-
     def getFaultPatternArgs(self):
         return self.fault_pattern_args
-
-    def setFaultPatternArgs(self, fault_pattern_args):
-        self.fault_pattern_args = fault_pattern_args
-
-    def setFaultType(self, fault_type):
-        self.fault_type = fault_type
 
     def getFaultArgs(self):
         return self.fault_args
 
-    def setFaultArgs(self, fault_args):
-        self.fault_args = fault_args
-
     def getPreInjectionTime(self):
         return float(self.pre_injection_time)
-
-    def setPreInjectionTime(self, pre_injection_time):
-        self.pre_injection_time = pre_injection_time
 
     def getInjectionTime(self):
         return float(self.injection_time)
 
-    def setInjectionTime(self, injection_time):
-        self.injection_time = injection_time
-
     def getPostInjectionTime(self):
         return float(self.post_injection_time)
 
-    def setPostInjectionTime(self, post_injection_time):
-        self.post_injection_time = post_injection_time
-
-    def getTargetType(self):
-        return self.target_type
-
-    def setTargetType(self, target_type):
-        self.target_type = target_type
 
     async def _inject_burst_pattern(self):
         # This uses nc s "persistent" pattern
@@ -633,6 +586,7 @@ class NodeInjector:
             for _ in range(burst_num):
                 self.execute_command_for_node(self.target_process_pid, stress_command)
                 await asyncio.sleep(burst_period - burst_duration)
+
         # TODO handle else case
 
     async def _inject_degradation(self):
