@@ -14,6 +14,7 @@ from mininet.faultlogger import FaultLogger
 
 tc_path = '/usr/sbin'  # TODO make this refer to a binary we have in our download
 
+# TODO insert tags for faults into logging
 
 class Injector:
 

@@ -108,7 +108,10 @@ class FaultControllerStarter(object):
                     interface_name = potential_interface_name
 
                 yml_config['faults'][i]['link_fault']['type_args'][0] = interface_name
-
+        for i, debug_command in enumerate(yml_config['log'].get("commands")):
+            host_string = debug_command.get("host")
+            node_identifying_tuple = self._get_mininet_agnostic_identifiers_from_identifier_string(net, host_string)
+            yml_config['log']['commands'][i]['host'] = str(node_identifying_tuple[0])
         return yml_config
         # TODO document our yml fault format
 
@@ -124,6 +127,8 @@ class FaultControllerStarter(object):
     @staticmethod
     def _get_mininet_agnostic_identifiers_from_identifier_string(net: 'Mininet', identifier_string: str) -> (
             int, str, str, str):
+        """Takes a string in our node presentation, which can either be a node name (h1), arrow notation (h1->s1),
+        or arrow notation with interfaces (h1->s1:eth0)"""
         corresponding_interface_name, corresponding_host = FaultControllerStarter._get_node_and_interface_name_from_identifier_string(
             net, identifier_string)
         process_group_id, net_namespace_identifier, cgroup, interface_name = FaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
@@ -252,7 +257,7 @@ class FaultControllerStarter(object):
         return process_group_id, net_namespace_identifier, cgroup, interface_name
 
 
-class FaultInjector():
+class FaultInjector:
     def __init__(self, agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults,
                  recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
         self.config = agnostic_config
@@ -308,7 +313,9 @@ class FaultInjector():
         log_config = config.get("log")
         interval = int(log_config["interval"])
         path = log_config["path"]
-        fault_logger = FaultLogger(interval=interval, log_filepath=path)
+        commands = log_config.get('commands', [])
+
+        fault_logger = FaultLogger(interval=interval, log_filepath=path, commands=commands)
         self.fault_logger = fault_logger
 
     def _configByFile(self, config):

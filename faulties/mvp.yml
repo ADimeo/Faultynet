@@ -15,4 +15,8 @@ faults:
 log:
   interval: 1000 # in ms
   path: "/home/containernet/fault_log_output.json"
+  commands:
+      - tag: "debug-command-1"
+        host: "h1"
+        command: "ip a"
 ...
