@@ -54,6 +54,7 @@ class FaultLogger(object):
         timestamp_ms = int(time.time_ns() / 1000000)
         ms_since_start = timestamp_ms - self.start_time_ms
         active_faults = self.get_active_faults()
+        log.debug("Generating fault log entry...\n")
 
         debugging_command_output = self.run_debug_commands()
 
@@ -68,10 +69,15 @@ class FaultLogger(object):
 
     def run_debug_commands(self):
         command_outputs = []
+        if self.commands is None:
+            return ""
+
         for command in self.commands:
-            full_command = (["nsenter", "--target", str(command['host']), "--net", "--pid", "--all"]
-                            + command['command'].split())
-            completed_process = run(full_command, capture_output=True, text=True, check=True)
+            if command['host'] is None:
+                full_command = command['command'] # Execute in main namespace
+            else:
+                full_command = f"nsenter --target {str(command['host'])} --net --pid --all " + command['command']
+            completed_process = run(full_command, capture_output=True, text=True, shell=True)
             all_output = completed_process.stdout + completed_process.stderr
 
             debug_object = {

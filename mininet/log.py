@@ -173,7 +173,7 @@ lg = logging.getLogger( "mininet" )
 _loggers = lg.info, lg.output, lg.warning, lg.error, lg.debug
 _loggers = tuple( makeListCompatible( logger ) for logger in _loggers )
 lg.info, lg.output, lg.warning, lg.error, lg.debug = _loggers
-info, output, warning, error, debug = _loggers
+info, output, warning, error, debug = _loggers # This darn thing breaks the best practice of formatting log strings :(
 warn = warning  # alternate/old name
 setLogLevel = lg.setLogLevel
 

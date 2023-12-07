@@ -100,7 +100,7 @@ from itertools import chain, groupby
 from math import ceil
 
 from mininet.cli import CLI
-from mininet.faultcontrollerstarter import FaultControllerStarter
+from mininet.fault_controllers.ConfigFileController import FaultControllerStarter
 from mininet.log import info, error, debug, output, warn
 from mininet.node import ( Node, Docker, Host, OVSKernelSwitch,
                            DefaultController, Controller, OVSSwitch, OVSBridge )

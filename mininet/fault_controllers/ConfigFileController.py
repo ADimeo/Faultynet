@@ -15,7 +15,7 @@ import yaml
 from mininet import log
 from mininet.faultlogger import FaultLogger
 from mininet.node import Node
-from mininet.thorfi_injector.injector_agent import Injector, NodeInjector
+from mininet.fault_injectors import LinkInjector, NodeInjector
 
 MESSAGE_SETUP_DONE = "m_faultinjector_ready"
 MESSAGE_SETUP_ERROR = "m_faultinjector_setuperror"
@@ -108,10 +108,22 @@ class FaultControllerStarter(object):
                     interface_name = potential_interface_name
 
                 yml_config['faults'][i]['link_fault']['type_args'][0] = interface_name
-        for i, debug_command in enumerate(yml_config['log'].get("commands")):
-            host_string = debug_command.get("host")
+        if 'log' not in yml_config:
+            # Caller doesn't want logs
+            return yml_config
+        commands = yml_config['log'].get("commands")
+        if commands is None:
+            return yml_config
+        for i, debug_command in enumerate(commands):
+
+            tag = debug_command.get('tag', None)
+            if tag is None:
+                tag = str(uuid.uuid4())
+                yml_config['log']['commands'][i]['tag'] = str(tag)
+
+            host_string = debug_command.get("host", None)
             node_identifying_tuple = self._get_mininet_agnostic_identifiers_from_identifier_string(net, host_string)
-            yml_config['log']['commands'][i]['host'] = str(node_identifying_tuple[0])
+            yml_config['log']['commands'][i]['host'] = node_identifying_tuple[0]
         return yml_config
         # TODO document our yml fault format
 
@@ -119,7 +131,6 @@ class FaultControllerStarter(object):
         # TODO handle doesn't exist, wrong config, etc.
         if filepath_to_config_file is None:
             return None
-
         with open(filepath_to_config_file, 'r') as file:
             config = yaml.safe_load(file)
         return config
@@ -151,7 +162,9 @@ class FaultControllerStarter(object):
         # These patterns are expected for link_fault s
         implicit_link_regex = "^(\w*)->(\w*)$"  # matches "host_name->host_name"
         explicit_link_regex = "^(\w*)->(\w*):(\w*)$"  # matches "host_name->host_name:interface_name", useful if more than one link exists
-
+        if identifier_string is None:
+            # This can happen for e.g. log commands, that don't need to be executed on a specific host
+            return None, None
         if match := re.match(implicit_link_regex, identifier_string):
             nodename_a = match.groups()[0]
             nodename_b = match.groups()[1]
@@ -214,6 +227,8 @@ class FaultControllerStarter(object):
                                                                corresponding_node: Node):
         # Returns a tuple of (pgid, net_namespace_identifier, cgroup, interface_name)#
         # process group id
+        if corresponding_node is None:
+            return None, None, None, None
         process_group_id = corresponding_node.pid  # If nodes assume this we can also assume it
 
         # net namespace id
@@ -262,7 +277,6 @@ class FaultInjector:
                  recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
         self.config = agnostic_config
         self.faults = []  # set in configByFile
-        self.total_runtime = 0
         self.fault_logger = None  # set in config_logger
 
         self.recv_pipe_mininet_to_faults = recv_pipe_mininet_to_faults
@@ -289,14 +303,16 @@ class FaultInjector:
         fault_coroutines = []
         for i in self.faults:
             fault_coroutines.append(i.go())
-        log_task = asyncio.create_task(self.fault_logger.go())
+        if self.fault_logger is not None:
+            log_task = asyncio.create_task(self.fault_logger.go())
         log.debug("All faults scheduled.\n")
         log_task_activator = self.listen_for_log_write()
 
         await asyncio.gather(*fault_coroutines)
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_INJECTION_DONE.encode())
-        self.fault_logger.stop()
-        await log_task
+        if self.fault_logger is not None:
+            self.fault_logger.stop()
+            await log_task
         await log_task_activator
         # All faults have finished injecting, so send the "done" message
 
@@ -305,14 +321,20 @@ class FaultInjector:
             continue
         potential_go_message = self.recv_pipe_mininet_to_faults.recv_bytes()
         if potential_go_message == MESSAGE_WRITE_LOGS.encode():
-            self.fault_logger.write_log_to_file()
+            if self.fault_logger is not None:
+                self.fault_logger.write_log_to_file()
         else:
             log.error("Received unexpected message while waiting for log-to-file message\n")
 
     def _config_logger(self, config):
         log_config = config.get("log")
-        interval = int(log_config["interval"])
-        path = log_config["path"]
+        if log_config is None:
+            return
+        # TODO add verbosity/on/off here
+        interval = int(log_config.get("interval", 0))
+        if interval == 0:
+            interval = None
+        path = log_config.get("path", None)
         commands = log_config.get('commands', [])
 
         fault_logger = FaultLogger(interval=interval, log_filepath=path, commands=commands)
@@ -333,7 +355,7 @@ class FaultInjector:
 
             # type, pattern, type_arg, pattern_arg
             fault_args = fault_dict.get('type_args', None)  # TODO handle absence gracefully
-            tag = str(fault_dict.get('tag', None))
+            tag = fault_dict.get('tag', None)
             if tag is None:
                 tag = str(uuid.uuid4())
 
@@ -342,10 +364,9 @@ class FaultInjector:
             fault_pattern_args = fault_dict.get('pattern_args', None)  # TODO handle absence gracefully
 
             # pre_injection_time, injection_time, post_injection_time
-            pre_injection_time = fault_dict.get('pre_injection_time', 0)
-            injection_time = fault_dict.get('injection_time', 0)
-            post_injection_time = fault_dict.get('post_injection_time', 0)
-            self.total_runtime = max(self.total_runtime, pre_injection_time + injection_time + post_injection_time)
+            pre_injection_time = fault_dict.get('pre_injection_time', None)
+            injection_time = fault_dict.get('injection_time', None)
+            post_injection_time = fault_dict.get('post_injection_time', None)
 
             # fault type - this also decides which injector we use
             if (fault_type_value := fault_dict.get('type', None)) is None:
@@ -365,24 +386,23 @@ class FaultInjector:
 
                         corresponding_interface_name = identifier_tuple[3]
                         corresponding_interface_name = corresponding_interface_name
-                        # TODO probably refactor that
-                        injector = Injector(target_interface=corresponding_interface_name,
-                                            target_namespace_pid=node_process_pid,
-                                            tag=tag,
+                        injector = LinkInjector(target_interface=corresponding_interface_name,
+                                                target_namespace_pid=node_process_pid,
+                                                tag=tag,
 
-                                            fault_target_traffic=fault_target_traffic,
-                                            fault_target_protocol=fault_target_protocol,
-                                            fault_target_dst_ports=dst_port,
-                                            fault_target_src_ports=src_port,
+                                                fault_target_traffic=fault_target_traffic,
+                                                fault_target_protocol=fault_target_protocol,
+                                                fault_target_dst_ports=dst_port,
+                                                fault_target_src_ports=src_port,
 
-                                            fault_type=fault_type,
-                                            fault_pattern=fault_pattern,
-                                            fault_args=fault_args,
-                                            fault_pattern_args=fault_pattern_args,
+                                                fault_type=fault_type,
+                                                fault_pattern=fault_pattern,
+                                                fault_args=fault_args,
+                                                fault_pattern_args=fault_pattern_args,
 
-                                            pre_injection_time=pre_injection_time,
-                                            injection_time=injection_time,
-                                            post_injection_time=post_injection_time)
+                                                pre_injection_time=pre_injection_time,
+                                                injection_time=injection_time,
+                                                post_injection_time=post_injection_time)
                         self.faults.append(injector)
                     # TODO document our yml fault format
                 elif match := re.match(node_fault_regex, fault_type_value):
@@ -395,6 +415,7 @@ class FaultInjector:
                         injector = NodeInjector(
                             target_process_pid=node_process_pid,
                             fault_type=fault_type,
+                            tag=tag,
 
                             pre_injection_time=pre_injection_time,
                             injection_time=injection_time,
