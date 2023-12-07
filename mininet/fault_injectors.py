@@ -356,7 +356,11 @@ class LinkInjector:
                     # the command is like: tc qdisc add dev tapa68bfef8-df root tbf rate 256kbit burst 1600 limit 3000
                     default_bottleneck_burst = '1600'
                     default_limit_burst = '3000'
-                    cmd_list.append(base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
+                    if len(fault_args) > 2:
+                        default_bottleneck_burst = str(fault_args[1])
+                        default_limit_burst = str(fault_args[2])
+                    cmd_list.append(
+                        base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args[0] + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
                 elif 'redirect' in fault_type:
                     destination_interface = fault_args[0]
                     try:
