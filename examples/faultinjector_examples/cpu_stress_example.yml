@@ -5,7 +5,7 @@ faults:
       injection_time: 5
       post_injection_time: 5
       type: "node_fault:stress_cpu"
-      type_args: ['20']
+      type_args: ['80']
       identifiers: 
         - "h1"
       pattern: "static"
@@ -15,7 +15,7 @@ faults:
       post_injection_time: 5
       type: "node_fault:stress_cpu"
       pattern: "degradation"
-      type_args: [10]
+      type_args: [20]
       pattern_args: ['10', 2]
       identifiers:
         - "h1"
@@ -29,4 +29,7 @@ faults:
       pattern_args: [2000, 4000] # burst length/period in ms
       identifiers:
           - "h1"
+log:
+    commands:
+      - command: "ps aux | grep stress-ng"
 ...

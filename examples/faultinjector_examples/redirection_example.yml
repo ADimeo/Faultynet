@@ -1,0 +1,12 @@
+---
+faults:
+  - link_fault:
+      pre_injection_time: 8
+      injection_time: 8
+      post_injection_time: 3
+      type: "link_fault:redirect"
+      type_args: ["s1->h3", "redirect"]
+      identifiers:
+        - "s1->h1" # All traffic that ingresses in the s1 interface that leads to h1 instead appears at the ingress for the interface that leads to h3
+      pattern: "persistent"
+...

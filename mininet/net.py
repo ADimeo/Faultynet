@@ -725,6 +725,12 @@ class Mininet( object ):
     # XXX These test methods should be moved out of this class.
     # Probably we should create a tests.py for them
 
+    def isFaultControllerActive(self):
+        if self.faultController is None:
+            return False
+        else:
+            return self.faultController.is_active()
+
     @staticmethod
     def _parsePing( pingOutput ):
         "Parse ping output and return packets sent, received."

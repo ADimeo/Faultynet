@@ -1,0 +1,10 @@
+---
+faults:
+  - link_fault:
+      type: "link_fault:loss"
+      pattern_args: [50]
+      identifiers:
+        - "s1->h1"
+        - "h1->s1"
+      pattern: "random"
+...

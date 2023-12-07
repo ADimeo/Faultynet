@@ -1,0 +1,19 @@
+---
+faults:
+  - link_fault:
+      tag: "if-down"
+      pre_injection_time: 10
+      injection_time: 10
+      post_injection_time: 5
+      type: "link_fault:down"
+      identifiers: 
+        - "h1->s1"
+      pattern: "persistent"
+log:
+  interval: 1000 # in ms
+  path: "/home/containernet/fault_log_output.json"
+  commands:
+      - tag: "debug-command-1"
+        host: "h1"
+        command: "ip link show h1-eth0"
+...
