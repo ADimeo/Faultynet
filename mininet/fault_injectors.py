@@ -214,8 +214,6 @@ class LinkInjector:
 
         # END INJECTION CODE
 
-        # wait 'self.post_injection_time' after removing injection injection
-        log.debug("Wait %s s of post-injection time\n" % self.getPostInjectionTime())
         # wait 'self.post_injection_time' after removing injection
         log.info("Fault %s waits %s s of post-injection time\n"%( self.tag, self.getPostInjectionTime()))
         await asyncio.sleep(self.getPostInjectionTime())
@@ -286,23 +284,10 @@ class LinkInjector:
                     command = base_command_tc + 'qdisc ' + tc_cmd + ' dev ' + device + ' ingress '
 
             elif 'down' in fault_type:
-                # TODO implement/test this
                 if 'add' in tc_cmd:
-                    # search for ifdown cmd
-                    p = subprocess.Popen('whereis -b ifdown | awk \'{print $2}\'', stdin=subprocess.PIPE,
-                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-                    output, err = p.communicate()
-                    ifdown_cmd = output.strip()
-                    if ifdown_cmd:
-                        command = ifdown_cmd + ' ' + device
+                    command = 'nsenter --target ' + str(node_pid) + ' --net ' + tc_path + '/ifconfig ' + device + ' down'
                 elif 'del' in tc_cmd:
-                    # search for ifdown cmd
-                    p = subprocess.Popen('whereis -b ifup | awk \'{print $2}\'', stdin=subprocess.PIPE,
-                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-                    output, err = p.communicate()
-                    ifup_cmd = output.strip()
-                    if ifup_cmd:
-                        command = ifup_cmd + ' ' + device
+                    command = 'nsenter --target ' + str(node_pid) + ' --net ' + tc_path + '/ifconfig ' + device + ' up'
             else:
                 # in that case for corruption and loss we can use the 'fault_args' to set 100% probability
                 command = base_qdisc_netem_command + fault_type + ' 100%'
