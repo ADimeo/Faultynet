@@ -145,37 +145,60 @@ class LinkInjector:
     async def _inject_degradation_pattern(self):
         # This uses nc s "random" pattern
         # increment for 'fault_pattern_args' each second
-        degradation_step = 1
-        degradation_config = self.getFaultPatternArgs()
-        degradation_value = degradation_config[0]
 
-        log.info("Degradation fault pattern!!!! Start with %s perc/s\n" % degradation_value)
+        if len(self.fault_pattern_args) >= 4:
+            end_degradation = int(self.fault_pattern_args[3])
+            end_degradation = min(end_degradation, 100)
+        else:
+            end_degradation = 100
+        if len(self.fault_pattern_args) >= 3:
+            start_degradation = str(self.fault_pattern_args[2])
+        else:
+            start_degradation = 0
+        if len(self.fault_pattern_args) >= 2:
+            degradation_step_length = int(self.fault_pattern_args[1]) /1000
+        else:
+            degradation_step_length = 1000 / 1000
 
-        for i in range(int(self.getInjectionTime())):
-            log.info("#%s step..." % i)
+        if len(self.fault_pattern_args) >= 1:
+            degradation_step_size = str(self.fault_pattern_args[0])
+        else:
+            degradation_step_size = str(5)
+            log.error(f"{self.tag} does not have enough pattern_args to define degradation step, defaulting to 5")
+
+
+        degradation_value = start_degradation
+        number_of_steps = int(self.getInjectionTime() / degradation_step_length)
+
+        interface = self.target_interface
+
+        log.info("Fault %s starting degradation with %s perc/s\n"  % (  self.tag, degradation_value))
+
+        for i in range(number_of_steps):
+            log.debug("%s #%s step..."%( self.tag, i))
             # iterate over all target devices to enable injection
-            interface = self.getTargetInterface()
-            log.debug("DEGRADATION ENABLE injection on nic %s \n" % (interface))
+
+            log.debug("%s DEGRADATION ENABLE injection on nic %s \n" % (  self.tag, interface))
 
             self.inject_nics(interface, self.namespace_pid, self.getFaultType(), 'random', [degradation_value],
-                             self.getFaultArgs(), self.getFaultTargetTraffic(),
-                             self.getFaultTargetProtocol(), self.getFaultTargetDstPorts(),
-                             self.getFaultTargetSrcPorts(), True)
+                             self.fault_args, self.fault_target_traffic,
+                             self.fault_target_protocol, self.fault_target_dst_ports,
+                             self.fault_target_src_ports, True)
 
-            log.debug("WAIT DEGRADATION DURATION...%s\n" % degradation_step)
-            await asyncio.sleep(degradation_step)
+            log.debug("%s WAIT DEGRADATION DURATION...%s\n" % (  self.tag, degradation_step_length))
+            await asyncio.sleep(degradation_step_length)
 
-            log.debug("DEGRADATION DISABLE injection on nic %s\n" % interface)
+            log.debug("%s DEGRADATION DISABLE injection on nic %s\n"  % (  self.tag, interface))
             self.inject_nics(interface, self.namespace_pid, self.getFaultType(), 'random', [degradation_value],
-                             self.getFaultArgs(), self.getFaultTargetTraffic(),
-                             self.getFaultTargetProtocol(), self.getFaultTargetDstPorts(),
-                             self.getFaultTargetSrcPorts(), False)
+                             self.fault_args, self.fault_target_traffic,
+                             self.fault_target_protocol, self.fault_target_dst_ports,
+                             self.fault_target_src_ports, False)
 
-            degradation_value = str(int(degradation_value) + int(degradation_config[0]))
-            if int(degradation_value) > 100:
-                degradation_value = str(100)
+            degradation_value = str(int(degradation_value) + int(degradation_step_size))
+            if int(degradation_value) > end_degradation :
+                degradation_value = str(end_degradation)
 
-            log.debug("updated degradation value %s\n" % degradation_value)
+            log.debug("%s updated degradation value %s\n"  % (  self.tag, degradation_value))
 
     async def _inject_static_pattern(self):
         # iterate over all target devices to enable injection
@@ -532,7 +555,7 @@ class NodeInjector:
             return cgroup_name
 
         except subprocess.CalledProcessError:
-            log.error("Can't access cgroups information")
+            log.error(f"Can't access cgroups information for fault {self.tag}")
         return None
 
     def execute_command_for_node(self, pid_of_node, command_to_execute, enable):
@@ -634,55 +657,76 @@ class NodeInjector:
             log.error(f"{self.tag} has unknown fault type: {self.fault_type}\n")
 
     async def _inject_degradation(self):
+        if len(self.fault_pattern_args) >= 4:
+            end_degradation = int(self.fault_pattern_args[3])
+            # Don't limit to 100, since this isn't percentages
+        else:
+            end_degradation = 100
+        if len(self.fault_pattern_args) >= 3:
+            start_degradation = str(self.fault_pattern_args[2])
+        else:
+            start_degradation = 0
+        if len(self.fault_pattern_args) >= 2:
+            degradation_step_length = int(self.fault_pattern_args[1]) /1000
+        else:
+            degradation_step_length = 1000 / 1000
+
+        if len(self.fault_pattern_args) >= 1:
+            degradation_step_size = str(self.fault_pattern_args[0])
+        else:
+            degradation_step_size = str(5)
+            log.error(f"{self.tag} does not have enough pattern_args to define degradation step, defaulting to 5")
+
+        number_of_steps = int(self.injection_time / degradation_step_length)
+        injection_intensity = start_degradation
+
         if self.fault_type == 'custom':
-            start_base_command = self.fault_args[0]
-            end_base_command = self.fault_args[1]
-
-            if len(self.fault_args) > 2:
-                step_start = int(self.fault_args[2])
+            if len(self.fault_args) >= 2:
+                start_base_command = self.fault_args[0]
+                end_base_command = self.fault_args[1]
+            elif len(self.fault_args) >= 1:
+                start_base_command = self.fault_args[0]
+                end_base_command = None
             else:
-                step_start = 0
+                log.error(f"{self.tag} missing fault args for injection\n")
+                start_base_command = None
+                end_base_command = None
 
-            step_size = int(self.fault_pattern_args[0])
-            step_duration = int(self.fault_pattern_args[1])
+            arguments_in_start_command = start_base_command.count("{}")
+            if arguments_in_start_command > 1:
+                # Iterating over multiple arguments is ill-defined, and running over arbitrary number of commands
+                log.error(f"{self.tag} contains more than one place to insert arguments, but currently only supports one!")
 
-            # TODO verify that {} and number of arguments is the same
-            # TODO also skip argument insertaion if
-            # TODO expand this to allow for multiple arguments - but later
-            test_duration = 0
-
-            injection_intensity = step_start
-            while test_duration < self.injection_time:
+            for i in range(number_of_steps):
                 start_command = start_base_command.format(injection_intensity)
                 end_command = end_base_command
 
                 self.execute_command_for_node(self.target_process_pid, start_command, True)
-                await asyncio.sleep(step_duration)
+                await asyncio.sleep(degradation_step_length)
                 self.execute_command_for_node(self.target_process_pid, end_command, False)
 
-                injection_intensity = injection_intensity + step_size
-                test_duration += step_duration
+                injection_intensity = injection_intensity + degradation_step_size
+                if injection_intensity > end_degradation:
+                    injection_intensity = end_degradation
+
         elif self.fault_type == 'stress_cpu':
             # increment by fault_pattern_args[0] every fault_pattern_args[1]
             cgroup_fraction = self._get_cgroup_size()
-            cpu_stress_starting_percentage = int(self.fault_args[0])
-            step_size_in_percent = int(self.fault_pattern_args[0])
-            stress_step_duration = int(self.fault_pattern_args[1])
+            # Run in the background with &, or this will be blocking logging
+            stress_base_command = "stress-ng -l {} -t {} --cpu 1 --cpu-method decimal64&"
+            for i in range(number_of_steps):
+                stress_to_inject = int(injection_intensity * cgroup_fraction)
 
-            starting_stress_applied_to_cgroup = int(cpu_stress_starting_percentage * cgroup_fraction)
-            stress_base_command = "stress-ng -l {} -t {} --cpu 1 --cpu-method decimal64"
-
-            test_duration = 0
-            # TODO probably limit to 100%? The other stressers as well
-            injection_intensity = starting_stress_applied_to_cgroup
-            while test_duration < self.injection_time:
-                stress_command = stress_base_command.format(injection_intensity, stress_step_duration)
+                stress_command = stress_base_command.format(stress_to_inject, int(degradation_step_length))
                 self.execute_command_for_node(self.target_process_pid, stress_command, True)
-                injection_intensity = int(injection_intensity + (step_size_in_percent * cgroup_fraction))
+                await asyncio.sleep(int(degradation_step_length))
+                injection_intensity = int(injection_intensity + degradation_step_size)
                 self.execute_command_for_node(self.target_process_pid, None, False)
-                test_duration += stress_step_duration
-                # No need to sleep, command runs for as long as indicated
-        # TODO handle else case
+                if injection_intensity > end_degradation:
+                    injection_intensity = end_degradation
+        else:
+            log.error(f"{self.tag} has unknown fault type: {self.fault_type}\n")
+
 
     async def _inject_static(self):
         # Build up
