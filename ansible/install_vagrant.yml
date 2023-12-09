@@ -14,8 +14,8 @@
 
   - name: Clone repo
     git:
-      repo: https://github.com/containernet/containernet.git
-      dest: /var/containernet
+      repo: https://github.com/ADimeo/Faultynet.git
+      dest: /var/Faultynet
       version: master
     when:
 
@@ -58,14 +58,14 @@
     pip: name=python-iptables state=latest
 
   - name: build and install Containernet (using Mininet installer)
-    shell: PYTHON=python3 containernet/util/install.sh
+    shell: PYTHON=python3 Faultynet/util/install.sh
     args:
       chdir: /var
 
   - name: install Containernet Python egg etc.
     shell: make develop
     args:
-      chdir: /var/containernet
+      chdir: /var/Faultynet
 
   - name: download 'ubuntu' docker image for Containernet example
     shell: docker pull ubuntu:trusty
