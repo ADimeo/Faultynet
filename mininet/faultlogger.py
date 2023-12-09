@@ -13,7 +13,13 @@ ACTIVE_FAULTS_DICT = dict()
 class FaultLogger(object):
 
     def __init__(self, interval=1000,  # in ms
-                 log_filepath='faultynet_faultlogfile.json'):
+                 log_filepath='faultynet_faultlogfile.json',
+                 commands=[]):
+        if interval is None:
+            interval = 1000
+        if log_filepath is None:
+            log_filepath='faultynet_faultlogfile.json'
+
         self.interval = interval / 1000  # asyncio.sleep expects seconds
         self.log_filepath = log_filepath
         self.commands = commands
@@ -89,7 +95,8 @@ class FaultLogger(object):
         return command_outputs
 
     def write_log_to_file(self):
-        log.error(f"Writing fault logs to {self.log_filepath}\n")
+        # TODO check if it should be enabled
+        log.info(f"Writing fault logs to {self.log_filepath}\n")
         logs = list(self.logged_faults.queue)
         with open(self.log_filepath, 'w') as json_file:
             json.dump(logs, json_file, indent=4)
