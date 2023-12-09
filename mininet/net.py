@@ -100,7 +100,7 @@ from itertools import chain, groupby
 from math import ceil
 
 from mininet.cli import CLI
-from mininet.fault_controllers.ConfigFileController import FaultControllerStarter
+from mininet.fault_controllers.ConfigFileFaultController import ConfigFileFaultControllerStarter
 from mininet.log import info, error, debug, output, warn
 from mininet.node import ( Node, Docker, Host, OVSKernelSwitch,
                            DefaultController, Controller, OVSSwitch, OVSBridge )
@@ -650,7 +650,7 @@ class Mininet( object ):
         if self.waitConn:
             self.waitConnected( self.waitConn )
         if self.faultFilepath:
-            self.faultController = FaultControllerStarter(self, self.faultFilepath)
+            self.faultController = ConfigFileFaultControllerStarter(self, self.faultFilepath)
             self.faultController.go()
 
     def stop( self ):

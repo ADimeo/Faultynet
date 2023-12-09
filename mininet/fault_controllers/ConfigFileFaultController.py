@@ -24,12 +24,11 @@ MESSAGE_INJECTION_DONE = "m_faultinjector_done"
 MESSAGE_WRITE_LOGS = "m_write_logs"
 
 
-class FaultControllerStarter(object):
+class ConfigFileFaultControllerStarter(object):
 
     def __init__(self, net_reference: 'Mininet', filepath_to_config_file=None):
         self.net_reference = net_reference
         self.faults = []
-        self.total_runtime = 0
         self.faults_are_active = False
 
         config = self._get_base_config_dict(filepath_to_config_file)
@@ -89,7 +88,7 @@ class FaultControllerStarter(object):
             new_identifier_strings = []
             for identifier_string in fault_dict.get("identifiers"):
                 # Identifiers are in a->b or a->b:interface pattern, or in "a" node pattern
-                node_identifying_tuple = FaultControllerStarter._get_mininet_agnostic_identifiers_from_identifier_string(
+                node_identifying_tuple = ConfigFileFaultControllerStarter._get_mininet_agnostic_identifiers_from_identifier_string(
                     net, identifier_string)
                 new_identifier_strings.append((repr(node_identifying_tuple)))
             fault_dict['identifiers'] = new_identifier_strings
@@ -140,9 +139,9 @@ class FaultControllerStarter(object):
             int, str, str, str):
         """Takes a string in our node presentation, which can either be a node name (h1), arrow notation (h1->s1),
         or arrow notation with interfaces (h1->s1:eth0)"""
-        corresponding_interface_name, corresponding_host = FaultControllerStarter._get_node_and_interface_name_from_identifier_string(
+        corresponding_interface_name, corresponding_host = ConfigFileFaultControllerStarter._get_node_and_interface_name_from_identifier_string(
             net, identifier_string)
-        process_group_id, net_namespace_identifier, cgroup, interface_name = FaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
+        process_group_id, net_namespace_identifier, cgroup, interface_name = ConfigFileFaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
             corresponding_interface_name, corresponding_host)
         return process_group_id, net_namespace_identifier, cgroup, interface_name
 
@@ -225,54 +224,16 @@ class FaultControllerStarter(object):
     @staticmethod
     def _get_passable_identifiers_from_node_and_interface_name(corresponding_interface_name: str,
                                                                corresponding_node: Node):
-        # Returns a tuple of (pgid, net_namespace_identifier, cgroup, interface_name)#
+        # Returns a tuple of (pgid, interface_name)#
         # process group id
         if corresponding_node is None:
             return None, None, None, None
         process_group_id = corresponding_node.pid  # If nodes assume this we can also assume it
-
-        # net namespace id
-        net_namespace_identifier = None
-        process_id = corresponding_node.pid
-        path_to_process_namespace = f"/proc/{process_id}/ns/net"
-        net_namespace_command = ["/usr/bin/ls", "-iL",
-                                 f"{path_to_process_namespace}"]  # TODO make this binary part of the distribution
-        # try:
-        completed_process = subprocess.run(net_namespace_command, text=True, capture_output=True)
-        log.debug(f"Output from node namespace command: {completed_process.stdout}")
-        print(completed_process.stderr)
-        completed_process.check_returncode()
-        # Output will always have a pattern like "4026532254 /proc/2783/ns/net", even if not in a network namespace
-        # (Since it's just in the root namespace at that point
-        # If it has a pattern like
-        net_ns_id = completed_process.stdout.split(' ')[0]
-        net_namespace_identifier = net_ns_id
-
-        # control group
-        # See https://docs.kernel.org/admin-guide/cgroup-v2.html#namespace for more information
-        # as well as https://man.archlinux.org/man/cgroups.7
-        # Write to  /sys/fs/cgroup/cgroup_name/cgroup.procs
-        cgroup = None
-        path_to_process_cgroup = f"/proc/{process_id}/cgroup"
-        cgroup_command = ["/usr/bin/cat", f"{path_to_process_cgroup}"]  # TODO make this binary part of the distribution
-
-        try:
-            cgroup_process = subprocess.run(cgroup_command, text=True, capture_output=True)
-            cgroup_process.check_returncode()
-            cgroup_path = cgroup_process.stdout
-            if cgroup_path.startswith("0::/"):  # Note: This is cgroup2 format, cgroup1 looks different
-                # TODO handle unexpected format
-                cgroup = cgroup_path.removeprefix("0::/")
-        except subprocess.CalledProcessError:
-            # TODO handle process not found error
-            print("Oh no")
-
         interface_name = corresponding_interface_name
+        return process_group_id, interface_name
 
-        return process_group_id, net_namespace_identifier, cgroup, interface_name
 
-
-class FaultInjector:
+class ConfigFileFaultController:
     def __init__(self, agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults,
                  recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
         self.config = agnostic_config
@@ -384,7 +345,7 @@ class FaultInjector:
                         identifier_tuple = literal_eval(identifier_string)
                         node_process_pid = identifier_tuple[0]
 
-                        corresponding_interface_name = identifier_tuple[3]
+                        corresponding_interface_name = identifier_tuple[1]
                         corresponding_interface_name = corresponding_interface_name
                         injector = LinkInjector(target_interface=corresponding_interface_name,
                                                 target_namespace_pid=node_process_pid,
@@ -450,8 +411,8 @@ class FaultInjector:
 def entrypoint_for_fault_controller(mininet_agnostic_faultconfig: dict, recv_pipe_mininet_to_faults,
                                     send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet,
                                     send_pipe_faults_to_mininet):
-    main_injector = FaultInjector(mininet_agnostic_faultconfig, recv_pipe_mininet_to_faults,
-                                  send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet)
+    main_injector = ConfigFileFaultController(mininet_agnostic_faultconfig, recv_pipe_mininet_to_faults,
+                                              send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet)
     main_injector.wait_until_go()
 
 
