@@ -141,9 +141,9 @@ class ConfigFileFaultControllerStarter(object):
         or arrow notation with interfaces (h1->s1:eth0)"""
         corresponding_interface_name, corresponding_host = ConfigFileFaultControllerStarter._get_node_and_interface_name_from_identifier_string(
             net, identifier_string)
-        process_group_id, net_namespace_identifier, cgroup, interface_name = ConfigFileFaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
+        process_group_id, interface_name = ConfigFileFaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
             corresponding_interface_name, corresponding_host)
-        return process_group_id, net_namespace_identifier, cgroup, interface_name
+        return process_group_id, interface_name
 
     @staticmethod
     def _is_string_in_arrow_pattern(net: 'Mininet', identifier_string) -> bool:

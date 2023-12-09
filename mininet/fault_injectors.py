@@ -460,11 +460,11 @@ class LinkInjector:
             if enable:
                 # enable fault injection
                 command = self.make_nics_injection_command(node_pid, device, fault_type, fault_pattern,
-                                                           fault_pattern_args[0] if fault_pattern_args else None,
+                                                           fault_pattern_args if fault_pattern_args else None,
                                                            fault_args, 'add')
             else:
                 command = self.make_nics_injection_command(node_pid, device, fault_type, fault_pattern,
-                                                           fault_pattern_args[0] if fault_pattern_args else None,
+                                                           fault_pattern_args if fault_pattern_args else None,
                                                            fault_args, 'del')
 
             log.debug("Execute command in namespace for process  %s: '%s'\n" % (node_pid, command))
