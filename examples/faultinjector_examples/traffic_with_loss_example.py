@@ -5,7 +5,6 @@ This example demonstrates a simple increasing degradation in packet loss, as wel
 a basic logging setup
 """
 import asyncio
-import os
 import pathlib
 import sys
 
@@ -50,23 +49,20 @@ async def run_test_traffic(net: Mininet):
     log.debug("Debug output activated\n")
 
     log.info("starting before iperf\n")
-    # h1.popen(iperf_command + " &> /home/containernet/before_run", shell=True)
-    h1.cmd(iperf_command + " &> /home/containernet/before_run")
+    h1.cmd(iperf_command + " &> before_run")
     log.info("Done\n")
     # await asyncio.sleep(10)
 
     for i in range(15):
         await asyncio.sleep(1)
     log.info("starting during iperf\n")
-    #h1.popen(iperf_command + " &> /home/containernet/during_run", shell=True)
-    h1.cmd(iperf_command + " &> /home/containernet/during_run")
+    h1.cmd(iperf_command + " &> dduring_run")
     log.info("Done\n")
     # await asyncio.sleep(10)
 
     await asyncio.sleep(5)
     log.info("starting after iperf\n")
-    #h1.popen(iperf_command + " &> /home/containernet/after_run", shell=True)
-    h1.cmd(iperf_command + " &> /home/containernet/after_run")
+    h1.cmd(iperf_command + " &> after_run")
     # await asyncio.sleep(10)
     log.info("Done\n")
     await asyncio.sleep(10)
