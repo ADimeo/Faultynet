@@ -5,19 +5,16 @@ This example demonstrates tearing down an interface, and logging with a custom c
 It also serves as an example for how to configure logging.
 """
 import asyncio
-import logging
+import os
 import sys
-import time
 
-from functools import partial
-
-from mininet.net import Mininet
-from mininet.node import UserSwitch, OVSKernelSwitch, Controller, CPULimitedHost
-from mininet.topo import Topo
-from mininet.log import lg, info
 from mininet import log
-from mininet.util import irange, quietRun, custom
 from mininet.link import Link
+from mininet.log import lg
+from mininet.net import Mininet
+from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.topo import Topo
+from mininet.util import custom
 
 flush = sys.stdout.flush
 class SimpleStarTopo(Topo):
@@ -54,7 +51,7 @@ async def run_ip_without_interface_test(net: Mininet):
 
 
 def fault_example_scenario():
-    fault_filepath = "/home/containernet/containernet/examples/faultinjector_examples/interface_down_example.yml"
+    fault_filepath = os.path.abspath(__file__).parent.absolute() + "interface_down_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 

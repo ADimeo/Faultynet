@@ -3,20 +3,15 @@
 """
 This example demonstrates how custom commands can be executed on a node to inject faults, or to run additional tasks
 """
-import asyncio
-import logging
+import os
 import sys
-import time
 
-from functools import partial
-
-from mininet.net import Mininet
-from mininet.node import UserSwitch, OVSKernelSwitch, Controller, CPULimitedHost
-from mininet.topo import Topo
-from mininet.log import lg, info
-from mininet import log
-from mininet.util import irange, quietRun, custom
 from mininet.link import Link
+from mininet.log import lg
+from mininet.net import Mininet
+from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.topo import Topo
+from mininet.util import custom
 
 flush = sys.stdout.flush
 class SimpleStarTopo(Topo):
@@ -37,8 +32,7 @@ class SimpleStarTopo(Topo):
 
 
 def fault_example_scenario():
-    "Check bandwidth at various lengths along a switch chain." # TODO fix comments in here
-    fault_filepath = "/home/containernet/containernet/examples/faultinjector_examples/custom_node_command_example.yml"
+    fault_filepath = os.path.abspath(__file__).parent.absolute() + "custom_node_command_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 

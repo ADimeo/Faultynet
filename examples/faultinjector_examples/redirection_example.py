@@ -4,19 +4,16 @@
 This example illustrates how to inject a redirection for all traffic on an interface
 """
 import asyncio
-import logging
+import os
 import sys
-import time
 
-from functools import partial
-
-from mininet.net import Mininet
-from mininet.node import UserSwitch, OVSKernelSwitch, Controller, CPULimitedHost
-from mininet.topo import Topo
-from mininet.log import lg, info
 from mininet import log
-from mininet.util import irange, quietRun, custom
 from mininet.link import Link
+from mininet.log import lg
+from mininet.net import Mininet
+from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.topo import Topo
+from mininet.util import custom
 
 flush = sys.stdout.flush
 class SimpleStarTopo(Topo):
@@ -67,7 +64,7 @@ async def redirect_command_test(net: Mininet):
 
 
 def fault_example_scenario():
-    fault_filepath = "/home/containernet/containernet/examples/faultinjector_examples/redirection_example.yml"
+    fault_filepath = os.path.abspath(__file__).parent.absolute() + "redirection_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 

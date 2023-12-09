@@ -4,19 +4,15 @@
 This example demonstrates how to inject gradually increasing packet loss into a link
 """
 import asyncio
-import logging
+import os
 import sys
-import time
 
-from functools import partial
-
-from mininet.net import Mininet
-from mininet.node import UserSwitch, OVSKernelSwitch, Controller, CPULimitedHost
-from mininet.topo import Topo
-from mininet.log import lg, info
-from mininet import log
-from mininet.util import irange, quietRun, custom
 from mininet.link import Link
+from mininet.log import lg
+from mininet.net import Mininet
+from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.topo import Topo
+from mininet.util import custom
 
 flush = sys.stdout.flush
 class SimpleStarTopo(Topo):
@@ -42,7 +38,7 @@ async def degradation_command_test(net: Mininet):
     h1.cmd("ping -i 0.2 -w 10 10.0.0.2") # This should indicate packet loss
 
 def fault_example_scenario():
-    fault_filepath = "/home/containernet/containernet/examples/faultinjector_examples/link_degradation_example.yml"
+    fault_filepath = os.path.abspath(__file__).parent.absolute() + "link_degradation_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 
