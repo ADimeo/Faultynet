@@ -6,13 +6,14 @@ a basic logging setup
 """
 import asyncio
 import os
+import pathlib
 import sys
 
 from mininet import log
-from mininet.link import Link
 from mininet.log import lg
 from mininet.net import Mininet
 from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.link import Link
 from mininet.topo import Topo
 from mininet.util import custom
 
@@ -73,7 +74,7 @@ async def run_test_traffic(net: Mininet):
 
 
 def fault_example_scenario():
-    fault_filepath = os.path.abspath(__file__).parent.absolute() + "traffic_with_loss_example.yml"
+    fault_filepath = str(pathlib.Path(__file__).parent.resolve()) + "/traffic_with_loss_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 

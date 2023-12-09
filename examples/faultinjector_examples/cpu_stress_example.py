@@ -4,13 +4,14 @@
 This example demonstrates how to add load to the cpu of a host, as well as executing logging commands
 from the host system instead of from a specific node
 """
-import os
+import pathlib
 import sys
 
-from mininet.link import Link
 from mininet.log import lg
 from mininet.net import Mininet
 from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.link import Link
+
 from mininet.topo import Topo
 from mininet.util import custom
 
@@ -32,7 +33,7 @@ class SimpleStarTopo(Topo):
 
 
 def fault_example_scenario():
-    fault_filepath = os.path.abspath(__file__).parent.absolute() + "cpu_stress_example.yml"
+    fault_filepath = str(pathlib.Path(__file__).parent.resolve()) + "/cpu_stress_example.yml"
 
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch

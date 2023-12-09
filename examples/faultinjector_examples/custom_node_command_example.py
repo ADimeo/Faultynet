@@ -3,13 +3,14 @@
 """
 This example demonstrates how custom commands can be executed on a node to inject faults, or to run additional tasks
 """
-import os
+import pathlib
 import sys
 
-from mininet.link import Link
 from mininet.log import lg
 from mininet.net import Mininet
 from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.link import Link
+
 from mininet.topo import Topo
 from mininet.util import custom
 
@@ -32,7 +33,7 @@ class SimpleStarTopo(Topo):
 
 
 def fault_example_scenario():
-    fault_filepath = os.path.abspath(__file__).parent.absolute() + "custom_node_command_example.yml"
+    fault_filepath = str(pathlib.Path(__file__).parent.resolve()) + "/custom_node_command_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 

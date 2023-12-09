@@ -5,14 +5,14 @@ This example demonstrates how to inject faults into a single protocol. Specifica
 but not IPv6-ICMP traffic
 """
 import asyncio
-import os
+import pathlib
 import sys
 
 from mininet import log
-from mininet.link import Link
 from mininet.log import lg
 from mininet.net import Mininet
 from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.link import Link
 from mininet.topo import Topo
 from mininet.util import custom
 
@@ -71,7 +71,7 @@ async def redirect_single_protocol_test(net: Mininet):
 
 def fault_example_scenario():
 
-    fault_filepath = os.path.abspath(__file__).parent.absolute() + "single_protocol_redirection_example.yml"
+    fault_filepath = str(pathlib.Path(__file__).parent.resolve()) + "/single_protocol_redirection_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 

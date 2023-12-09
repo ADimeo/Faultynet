@@ -5,14 +5,15 @@ This example demonstrates tearing down an interface, and logging with a custom c
 It also serves as an example for how to configure logging.
 """
 import asyncio
-import os
+import pathlib
 import sys
 
 from mininet import log
-from mininet.link import Link
 from mininet.log import lg
 from mininet.net import Mininet
 from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
+from mininet.link import Link
+
 from mininet.topo import Topo
 from mininet.util import custom
 
@@ -51,7 +52,7 @@ async def run_ip_without_interface_test(net: Mininet):
 
 
 def fault_example_scenario():
-    fault_filepath = os.path.abspath(__file__).parent.absolute() + "interface_down_example.yml"
+    fault_filepath = str(pathlib.Path(__file__).parent.resolve()) + "/interface_down_example.yml"
     topo = SimpleStarTopo()
     Switch = OVSKernelSwitch
 
