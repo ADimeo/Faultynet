@@ -10,7 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-        ubuntu: ["18.04", "20.04"]
+        ubuntu: ["18.04", "20.04", "22.04"]
 
     name: Run tests on Ubuntu ${{ matrix.ubuntu }}
     runs-on: ubuntu-${{ matrix.ubuntu }}
