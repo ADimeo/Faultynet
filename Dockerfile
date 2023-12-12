@@ -1,5 +1,7 @@
-FROM ubuntu:18.04
-LABEL maintainer="manuel@peuster.de"
+FROM ubuntu:22.04
+LABEL maintainer="antonio.dimeo@student.hpi.de"
+ENV TZ=Europe/PARIS \
+    DEBIAN_FRONTEND=noninteractive
 
 # install required packages
 RUN apt-get clean
@@ -19,10 +21,10 @@ RUN apt-get update \
     sudo
 
 # install containernet (using its Ansible playbook)
-COPY . /containernet
-WORKDIR /containernet/ansible
+COPY . /Faultynet
+WORKDIR /Faultynet/ansible
 RUN ansible-playbook -i "localhost," -c local --skip-tags "notindocker" install.yml
-WORKDIR /containernet
+WORKDIR /Faultynet
 RUN make develop
 
 # Hotfix: https://github.com/pytest-dev/pytest/issues/4770
