@@ -62,7 +62,7 @@ class FaultLogger(object):
         try:
             del ACTIVE_FAULTS_DICT[tag]
         except KeyError:
-            log.warn(f'Could not disable fault {tag}, likely due to race conditions. Logs may be incorrect.\n')
+            log.warn(f'Could not disable fault {tag}, likely due to duplicate tag, or race condition. Logs may be incorrect.\n')
 
     def get_active_faults(self):
         return list(ACTIVE_FAULTS_DICT.values())
@@ -75,7 +75,6 @@ class FaultLogger(object):
 
         debugging_command_output = self.run_debug_commands()
 
-        # TODO potentially add last_changed, activated/deactivated since last?
         logging_point_in_time = {
             'time_ms': timestamp_ms,
             'time_since_start_ms': ms_since_start,

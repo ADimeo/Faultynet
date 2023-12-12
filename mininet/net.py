@@ -595,8 +595,6 @@ class Mininet( object ):
             self.startTerms()
         if self.autoStaticArp:
             self.staticArp()
-        if self.faultFilepath:
-            self.buildFaultController(self.faultFilepath)
         self.built = True
 
     def startTerms( self ):
