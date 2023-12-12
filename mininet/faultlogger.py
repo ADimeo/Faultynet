@@ -7,10 +7,16 @@ from mininet import log
 from subprocess import run
 
 ACTIVE_FAULTS_DICT = dict()
+
+
 # This _should_ be fine, since cpython guarantees us that the dict won't
 # corrupt - and based on tags each fault should only change itself
 
 class FaultLogger(object):
+    """Writes details about faults to a file, based on internal state. Checks state in given time interval.
+    Start logging with go(), end it with stop(). Logging happens async. Logs are only written to file when
+    calling write_log_to_file. Notably, this doesn't happen automatically, when calling either stop() or go().
+    """
 
     def __init__(self, interval=1000,  # in ms
                  log_filepath='faultynet_faultlogfile.json',
@@ -18,7 +24,7 @@ class FaultLogger(object):
         if interval is None:
             interval = 1000
         if log_filepath is None:
-            log_filepath='faultynet_faultlogfile.json'
+            log_filepath = 'faultynet_faultlogfile.json'
 
         self.interval = interval / 1000  # asyncio.sleep expects seconds
         self.log_filepath = log_filepath
@@ -35,8 +41,13 @@ class FaultLogger(object):
         while self.active:
             log_tasks.append(asyncio.create_task(self.log()))  # Store to prevent mid-task garbage collection
             await asyncio.sleep(self.interval)
+        # Once done, write to file.
+        # Others can also call us to write to file, but that's fine: IF they write later we only
+        # get additional logs, and nothing is lost
+        self.write_log_to_file()
 
     def stop(self):
+        log.debug("Stopping fault logger\n")
         self.active = False
 
     @classmethod
@@ -80,7 +91,7 @@ class FaultLogger(object):
 
         for command in self.commands:
             if command['host'] is None:
-                full_command = command['command'] # Execute in main namespace
+                full_command = command['command']  # Execute in main namespace
             else:
                 full_command = f"nsenter --target {str(command['host'])} --net --pid --all " + command['command']
             completed_process = run(full_command, capture_output=True, text=True, shell=True)
@@ -95,7 +106,6 @@ class FaultLogger(object):
         return command_outputs
 
     def write_log_to_file(self):
-        # TODO check if it should be enabled
         log.info(f"Writing fault logs to {self.log_filepath}\n")
         logs = list(self.logged_faults.queue)
         with open(self.log_filepath, 'w') as json_file:

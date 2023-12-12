@@ -56,7 +56,7 @@ async def run_test_traffic(net: Mininet):
     for i in range(15):
         await asyncio.sleep(1)
     log.info("starting during iperf\n")
-    h1.cmd(iperf_command + " &> dduring_run")
+    h1.cmd(iperf_command + " &> during_run")
     log.info("Done\n")
     # await asyncio.sleep(10)
 

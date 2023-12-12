@@ -32,17 +32,19 @@ from mininet.faultlogger import FaultLogger
 
 tc_path = str(pathlib.Path(__file__).parent.parent.resolve()) + "/bin"
 
+
 class LinkInjector:
+    """Link-based injector. Injects faults into links by modifiing their corresponding interfaces, e.g. with tc-netem.
+    """
 
     def __init__(self,
                  target_interface=None,  # user-provided. Interfaces, like eth0. Expects a list
                  target_namespace_pid=None,
                  tag=None,
                  # user-provided, pid of the main node shell we should inject on
-                 fault_target_traffic=None,
-                 # user-provided, if fault target is not ANY_TRAFFIC generate cmds for injecting according to protocol
+                 fault_target_protocol=None,
+                 # if fault target is not any (or 'any') generate cmds for injecting according to protocol
                  # and port number
-                 fault_target_protocol=None,  # user-provided
                  fault_target_dst_ports=None,  # user-provided
                  fault_target_src_ports=None,  # user-provided
                  fault_type=None,  # user-provided, "delay", "persistent", "bottleneck", "down", duplicate
@@ -64,7 +66,6 @@ class LinkInjector:
         self.namespace_pid = target_namespace_pid
         self.tag = tag
 
-        self.fault_target_traffic = fault_target_traffic
         self.fault_target_protocol = fault_target_protocol
         self.fault_target_dst_ports = fault_target_dst_ports
         self.fault_target_src_ports = fault_target_src_ports
@@ -115,31 +116,31 @@ class LinkInjector:
         burst_duration = float(burst_config[0]) / 1000
         burst_period = float(burst_config[1]) / 1000
 
-        log.info("Fault %s starting burst injections, time: %s\n" % ( self.tag, self.getInjectionTime()))
+        log.info("Fault %s starting burst injections, time: %s\n" % (self.tag, self.getInjectionTime()))
         burst_num = int((self.getInjectionTime()) / burst_period)
 
         log.debug("Burst config: burst_duration: %s burst_period: %s burst_num: %s\n" % (
             burst_duration, burst_period, burst_num))
 
-        for i in range(burst_num):
+        for _ in range(burst_num):
             # iterate over all target devices to enable injection
             interface = self.target_interface
-            log.debug("%s BURST ENABLE injection on nic %s\n" % (  self.tag,  interface))
+            log.debug("%s BURST ENABLE injection on nic %s\n" % (self.tag, interface))
             self.inject_nics(interface, self.namespace_pid, self.getFaultType(), 'persistent', [''],
                              self.fault_args,
-                             self.fault_target_traffic, self.fault_target_protocol,
+                             self.fault_target_protocol,
                              self.fault_target_dst_ports, self.fault_target_src_ports, True)
 
-            log.debug("%s WAIT BURST DURATION...%s\n" % (  self.tag, burst_duration))
+            log.debug("%s WAIT BURST DURATION...%s\n" % (self.tag, burst_duration))
             await asyncio.sleep(burst_duration)
 
-            log.debug("%s BURST DISABLE injection on nic %s \n"   % ( self.tag,  interface))
+            log.debug("%s BURST DISABLE injection on nic %s \n" % (self.tag, interface))
             self.inject_nics(interface, self.namespace_pid, self.getFaultType(), 'persistent', [''],
                              self.fault_args,
-                             self.fault_target_traffic, self.fault_target_protocol,
+                             self.fault_target_protocol,
                              self.fault_target_dst_ports, self.fault_target_src_ports, False)
 
-            log.debug("%s WAIT BURST remaining time...%s\n"  % (  self.tag, (burst_period - burst_duration)))
+            log.debug("%s WAIT BURST remaining time...%s\n" % (self.tag, (burst_period - burst_duration)))
             await asyncio.sleep(burst_period - burst_duration)
 
     async def _inject_degradation_pattern(self):
@@ -156,7 +157,7 @@ class LinkInjector:
         else:
             start_degradation = 0
         if len(self.fault_pattern_args) >= 2:
-            degradation_step_length = int(self.fault_pattern_args[1]) /1000
+            degradation_step_length = int(self.fault_pattern_args[1]) / 1000
         else:
             degradation_step_length = 1000 / 1000
 
@@ -166,58 +167,57 @@ class LinkInjector:
             degradation_step_size = str(5)
             log.error(f"{self.tag} does not have enough pattern_args to define degradation step, defaulting to 5")
 
-
         degradation_value = start_degradation
         number_of_steps = int(self.getInjectionTime() / degradation_step_length)
 
         interface = self.target_interface
 
-        log.info("Fault %s starting degradation with %s perc/s\n"  % (  self.tag, degradation_value))
+        log.info("Fault %s starting degradation with %s perc/s\n" % (self.tag, degradation_value))
 
         for i in range(number_of_steps):
-            log.debug("%s #%s step..."%( self.tag, i))
+            log.debug("%s #%s step..." % (self.tag, i))
             # iterate over all target devices to enable injection
 
-            log.debug("%s DEGRADATION ENABLE injection on nic %s \n" % (  self.tag, interface))
+            log.debug("%s DEGRADATION ENABLE injection on nic %s \n" % (self.tag, interface))
 
             self.inject_nics(interface, self.namespace_pid, self.getFaultType(), 'random', [degradation_value],
-                             self.fault_args, self.fault_target_traffic,
+                             self.fault_args,
                              self.fault_target_protocol, self.fault_target_dst_ports,
                              self.fault_target_src_ports, True)
 
-            log.debug("%s WAIT DEGRADATION DURATION...%s\n" % (  self.tag, degradation_step_length))
+            log.debug("%s WAIT DEGRADATION DURATION...%s\n" % (self.tag, degradation_step_length))
             await asyncio.sleep(degradation_step_length)
 
-            log.debug("%s DEGRADATION DISABLE injection on nic %s\n"  % (  self.tag, interface))
+            log.debug("%s DEGRADATION DISABLE injection on nic %s\n" % (self.tag, interface))
             self.inject_nics(interface, self.namespace_pid, self.getFaultType(), 'random', [degradation_value],
-                             self.fault_args, self.fault_target_traffic,
+                             self.fault_args,
                              self.fault_target_protocol, self.fault_target_dst_ports,
                              self.fault_target_src_ports, False)
 
             degradation_value = str(int(degradation_value) + int(degradation_step_size))
-            if int(degradation_value) > end_degradation :
+            if int(degradation_value) > end_degradation:
                 degradation_value = str(end_degradation)
 
-            log.debug("%s updated degradation value %s\n"  % (  self.tag, degradation_value))
+            log.debug("%s updated degradation value %s\n" % (self.tag, degradation_value))
 
     async def _inject_static_pattern(self):
         # iterate over all target devices to enable injection
         interface = self.target_interface
-        log.info("Fault %s starting static injection on nic %s\n"  % (  self.tag,interface))
+        log.info("Fault %s starting static injection on nic %s\n" % (self.tag, interface))
 
         self.inject_nics(interface, self.namespace_pid, self.getFaultType(), self.getFaultPattern(),
-                         self.fault_pattern_args, self.fault_args, self.fault_target_traffic,
+                         self.fault_pattern_args, self.fault_args,
                          self.fault_target_protocol, self.fault_target_dst_ports,
                          self.fault_target_src_ports, True)
 
-        log.debug("%s Wait the injection time (%s s)\n"  % ( self.tag,self.getInjectionTime()))
+        log.debug("%s Wait the injection time (%s s)\n" % (self.tag, self.getInjectionTime()))
         await asyncio.sleep(self.getInjectionTime())
 
         # iterate over all target devices to disable injection
-        log.debug("%s Disable injection on nic %s\n"  % ( self.tag, interface))
+        log.debug("%s Disable injection on nic %s\n" % (self.tag, interface))
 
         self.inject_nics(interface, self.namespace_pid, self.getFaultType(), self.getFaultPattern(),
-                         self.fault_pattern_args, self.fault_args, self.fault_target_traffic,
+                         self.fault_pattern_args, self.fault_args,
                          self.fault_target_protocol, self.fault_target_dst_ports,
                          self.fault_target_src_ports, False)
 
@@ -225,7 +225,7 @@ class LinkInjector:
         await self.do_injection()
 
     async def do_injection(self):
-        log.info("Fault %s waits %s s of pre-injection time\n" % (  self.tag, self.getPreInjectionTime()))
+        log.info("Fault %s waits %s s of pre-injection time\n" % (self.tag, self.getPreInjectionTime()))
         await asyncio.sleep(self.getPreInjectionTime())
 
         if 'burst' in self.getFaultPattern():
@@ -238,7 +238,7 @@ class LinkInjector:
         # END INJECTION CODE
 
         # wait 'self.post_injection_time' after removing injection
-        log.info("Fault %s waits %s s of post-injection time\n"%( self.tag, self.getPostInjectionTime()))
+        log.info("Fault %s waits %s s of post-injection time\n" % (self.tag, self.getPostInjectionTime()))
         await asyncio.sleep(self.getPostInjectionTime())
 
     def make_nics_injection_command(self, node_pid, device, fault_type, fault_pattern, fault_pattern_args, fault_args,
@@ -285,7 +285,8 @@ class LinkInjector:
                     default_bottleneck_burst = str(fault_args[1])
                     default_limit_burst = str(fault_args[2])
                 command = (base_command_tc + ' qdisc ' + tc_cmd + ' dev '
-                           + device + ' root tbf rate ' + fault_args[0] + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
+                           + device + ' root tbf rate ' + fault_args[
+                               0] + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
             elif 'redirect' in fault_type:
                 destination_interface = fault_args[0]
                 try:
@@ -308,7 +309,8 @@ class LinkInjector:
 
             elif 'down' in fault_type:
                 if 'add' in tc_cmd:
-                    command = 'nsenter --target ' + str(node_pid) + ' --net ' + tc_path + '/ifconfig ' + device + ' down'
+                    command = 'nsenter --target ' + str(
+                        node_pid) + ' --net ' + tc_path + '/ifconfig ' + device + ' down'
                 elif 'del' in tc_cmd:
                     command = 'nsenter --target ' + str(node_pid) + ' --net ' + tc_path + '/ifconfig ' + device + ' up'
             else:
@@ -369,11 +371,13 @@ class LinkInjector:
                     # e.g., tc qdisc add dev tap0897f3c6-e0 root netem delay 50ms reorder 50%
                     random_perc = 100 - int(fault_pattern_args[0])
                     cmd_list.append(
-                        base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + fault_args[0] + ' reorder ' + str(
+                        base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' +
+                        fault_args[0] + ' reorder ' + str(
                             random_perc) + '%')
                 else:
                     cmd_list.append(
-                        base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + str(fault_pattern_args[0]) + '%')
+                        base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: netem ' + fault_type + ' ' + str(
+                            fault_pattern_args[0]) + '%')
             elif 'persistent' in fault_pattern:
                 if 'bottleneck' in fault_type:
                     # the command is like: tc qdisc add dev tapa68bfef8-df root tbf rate 256kbit burst 1600 limit 3000
@@ -383,7 +387,8 @@ class LinkInjector:
                         default_bottleneck_burst = str(fault_args[1])
                         default_limit_burst = str(fault_args[2])
                     cmd_list.append(
-                        base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args[0] + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
+                        base_command_tc + 'qdisc add dev ' + device + ' parent 1:1 handle 2: tbf rate ' + fault_args[
+                            0] + 'kbit burst ' + default_bottleneck_burst + ' limit ' + default_limit_burst)
                 elif 'redirect' in fault_type:
                     destination_interface = fault_args[0]
                     try:
@@ -422,7 +427,7 @@ class LinkInjector:
 
         return cmd_list
 
-    def inject_nics(self, device, node_pid, fault_type, fault_pattern, fault_pattern_args, fault_args, target_traffic,
+    def inject_nics(self, device, node_pid, fault_type, fault_pattern, fault_pattern_args, fault_args,
                     target_protocol, target_dst_ports, target_src_ports, enable):
 
         # tc/netem commands used to inject fault
@@ -452,10 +457,9 @@ class LinkInjector:
         # to disable:
         # ip netns exec qrouter-8f998d26-79e1-41ff-8fd8-ba362ab4fc92 tc qdisc add dev qg-a931d750-88 root handle 1: prio
 
-
         # NOTE: We are injecting on the other network resources except floating IP
-        # if fault target is ANY_TRAFFIC call make_nics_injection_command
-        if 'any' in target_traffic:
+        # if fault target is any call make_nics_injection_command
+        if 'any' in target_protocol:
             # Inject into all protocols
             if enable:
                 # enable fault injection
@@ -479,7 +483,7 @@ class LinkInjector:
             else:
                 log.debug("Command '%s' was terminated correctly (retcode %s)\n" % (command, retcode))
 
-        # if fault target is not ANY_TRAFFIC generate cmds for injecting according to protocol and port number
+        # if fault target is not any generate cmds for injecting according to protocol and port number
         else:
             # Inject into only specific protocols
             cmd_list = []
@@ -512,6 +516,8 @@ class LinkInjector:
 
 
 class NodeInjector:
+    """Injector for injecting nodes. Nodes are identified by their process id, and faults are executed in the
+    same cgroup/network namespace of the original process."""
     def __init__(self,
                  target_process_pid=None,  # This pid represents the "node" we want to run on
                  tag=None,
@@ -521,7 +527,7 @@ class NodeInjector:
                  post_injection_time=0,
                  fault_args=None,  # For stress: Percentage. For custom: Start command/end command
                  fault_pattern=None,  # persistent|burst|degradation
-                 fault_pattern_args=None # intensity of pattern, etc.
+                 fault_pattern_args=None  # intensity of pattern, etc.
                  ):
         self.target_process_pid = target_process_pid
         self.tag = tag
@@ -543,7 +549,7 @@ class NodeInjector:
         # Returns name of the cgroup that the target process is running in
         pid = self.target_process_pid
         path_to_process_cgroup = f"/proc/{pid}/cgroup"
-        cgroup_command = [tc_path+"/cat", path_to_process_cgroup]
+        cgroup_command = [tc_path + "/cat", path_to_process_cgroup]
         try:
             cgroup_process = subprocess.run(cgroup_command, text=True, capture_output=True)
             cgroup_process.check_returncode()
@@ -577,7 +583,8 @@ class NodeInjector:
         retcode = run(full_command, shell=True).returncode
         time_after = time.time()
         if time_after - time_after > 2:
-            log.error("Node command took more than 2 seconds to execute. Blocking commands can lead to unexpected outcomes, like logs not generating!\n")
+            log.error(
+                "Node command took more than 2 seconds to execute. Blocking commands can lead to unexpected outcomes, like logs not generating!\n")
         if enable:
             FaultLogger.set_fault_active(self.tag, self.fault_type, command_to_execute, retcode)
         else:
@@ -607,15 +614,20 @@ class NodeInjector:
             return None
 
     async def _inject_burst(self):
-        if len(self.fault_pattern_args) < 2:
+        burst_config = self.fault_pattern_args
+        if len(burst_config) < 2:
             log.error(f"{self.tag} missing fault pattern args for injection\n")
-
-        if self.fault_type == 'custom':
-            burst_config = self.fault_pattern_args
+        if len(burst_config) < 2:
+            log.error(f"{self.tag} burst is missing parameters, defaulting to 1 second per 2 seconds\n")
+            burst_duration = 1
+            burst_period = 2
+        else:
             burst_duration = int(burst_config[0]) / 1000
             burst_period = int(burst_config[1]) / 1000  # after each burst, wait for (burst_period - burst_duration)
-            burst_num = int((self.injection_time) / burst_period)  # how often we burst
 
+        burst_num = int((self.injection_time) / burst_period)  # how often we burst
+
+        if self.fault_type == 'custom':
             if len(self.fault_args) >= 2:
                 start_command = self.fault_args[0]
                 end_command = self.fault_args[1]
@@ -634,13 +646,14 @@ class NodeInjector:
                 await asyncio.sleep(burst_period - burst_duration)
 
         elif self.fault_type == 'stress_cpu':
-            burst_config = self.fault_pattern_args
-            burst_duration = int(max(1, burst_config[0] / 1000))
-            burst_period = int(burst_config[1]) / 1000  # after each burst, wait for (burst_period - burst_duration)
-            burst_num = int(self.injection_time / burst_period)  # how often we burst
-
+            burst_duration = int(max(1, burst_duration))  # stress-ng has a minimum interval of 1 second
             cgroup_fraction = self._get_cgroup_size()
-            cpu_stress_percentage = int(self.fault_args[0])
+            if len(self.fault_args) >= 1:
+                cpu_stress_percentage = int(self.fault_args[0])
+            else:
+                log.error(f"{self.tag} is missing stress intensity, defaulting to 50%")
+                cpu_stress_percentage = 50
+
             stress_percentage_applied_to_cgroup = int(cpu_stress_percentage * cgroup_fraction)
 
             # decimal64 gives usages which are relatively close to the requested usage, unlike e.g. euler
@@ -667,7 +680,7 @@ class NodeInjector:
         else:
             start_degradation = 0
         if len(self.fault_pattern_args) >= 2:
-            degradation_step_length = int(self.fault_pattern_args[1]) /1000
+            degradation_step_length = int(self.fault_pattern_args[1]) / 1000
         else:
             degradation_step_length = 1000 / 1000
 
@@ -695,7 +708,8 @@ class NodeInjector:
             arguments_in_start_command = start_base_command.count("{}")
             if arguments_in_start_command > 1:
                 # Iterating over multiple arguments is ill-defined, and running over arbitrary number of commands
-                log.error(f"{self.tag} contains more than one place to insert arguments, but currently only supports one!")
+                log.error(
+                    f"{self.tag} contains more than one place to insert arguments, but currently only supports one!")
 
             for i in range(number_of_steps):
                 start_command = start_base_command.format(injection_intensity)
@@ -706,8 +720,8 @@ class NodeInjector:
                 self.execute_command_for_node(self.target_process_pid, end_command, False)
 
                 injection_intensity = injection_intensity + degradation_step_size
-                if injection_intensity > end_degradation:
-                    injection_intensity = end_degradation
+                injection_intensity = min(injection_intensity, end_degradation)
+
 
         elif self.fault_type == 'stress_cpu':
             # increment by fault_pattern_args[0] every fault_pattern_args[1]
@@ -722,19 +736,28 @@ class NodeInjector:
                 await asyncio.sleep(int(degradation_step_length))
                 injection_intensity = int(injection_intensity + degradation_step_size)
                 self.execute_command_for_node(self.target_process_pid, None, False)
-                if injection_intensity > end_degradation:
-                    injection_intensity = end_degradation
+                injection_intensity = min(injection_intensity, end_degradation)
         else:
             log.error(f"{self.tag} has unknown fault type: {self.fault_type}\n")
-
 
     async def _inject_static(self):
         # Build up
         if self.fault_type == 'custom':
             duration_in_seconds = self.injection_time
+            if len(self.fault_args) < 2:
+                # Only start command is present
+                start_command = self.fault_args[0]
+                end_command = None  #
+            elif len(self.fault_args < 1):
+                # No commands are present
+                log.error(f"{self.tag} doesn't have enough arguments! ")
+                start_command = None
+                end_command = None
+            else:
+                # Start and stop command are present
+                start_command = self.fault_args[0]
+                end_command = self.fault_args[1]
 
-            start_command = self.fault_args[0]
-            end_command = self.fault_args[1]
             self.execute_command_for_node(self.target_process_pid, start_command, True)
             await asyncio.sleep(duration_in_seconds)
             self.execute_command_for_node(self.target_process_pid, end_command, False)
@@ -744,7 +767,11 @@ class NodeInjector:
             # Users want n % cpu usage _on a node_ (=cgroup), but the stress-ng takes a global load.
             # To get our in-cpu we reduce the stress instruction by however much cpu is not allowed in our cgroup
             cgroup_fraction = float(self._get_cgroup_size())
-            cpu_stress_percentage = float(self.fault_args[0])
+            if len(self.fault_args < 1):
+                log.error(f"{self.tag} doesn't define stress intensity! defaulting to 50%")
+                cpu_stress_percentage = 50
+            else:
+                cpu_stress_percentage = float(self.fault_args[0])
             stress_percentage_applied_to_cgroup = int(cpu_stress_percentage * cgroup_fraction)
             duration_in_seconds = self.injection_time
             stress_base_command = f"stress-ng -l {stress_percentage_applied_to_cgroup} -t {duration_in_seconds} --cpu 1 --cpu-method decimal64&"
@@ -753,12 +780,11 @@ class NodeInjector:
             # No need to sleep, command runs for as long as indicated
             # Dummy call to log that it's done
             self.execute_command_for_node(self.target_process_pid, None, False)
-
-
-        # TODO handle else case
+        else:
+            log.error(f"{self.tag} unknown fault type: {self.fault_type}")
 
     async def do_injection(self):
-        log.info("Fault %s waits %s s of pre-injection time\n"%( self.tag, self.pre_injection_time))
+        log.info("Fault %s waits %s s of pre-injection time\n" % (self.tag, self.pre_injection_time))
         await asyncio.sleep(self.pre_injection_time)
         if self.fault_pattern == 'burst':
             await self._inject_burst()
@@ -769,6 +795,6 @@ class NodeInjector:
         else:
             log.error(f"{self.tag} has unknown fault pattern")
 
-        log.info("Fault %s waits %s s of post-injection time\n"%( self.tag, self.post_injection_time))
+        log.info("Fault %s waits %s s of post-injection time\n" % (self.tag, self.post_injection_time))
         await asyncio.sleep(self.post_injection_time)
         return
