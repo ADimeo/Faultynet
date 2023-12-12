@@ -318,10 +318,6 @@ class ConfigFileFaultController:
                 fault_dict)
 
             # type, pattern, type_arg, pattern_arg
-            fault_args = fault_dict.get('type_args', None)  # TODO handle absence gracefully
-            tag = fault_dict.get('tag', None)
-            if tag is None:
-                tag = str(uuid.uuid4())
             fault_args = fault_dict.get('type_args', None)
             tag = fault_dict.get('tag', None) # None should never happen, since the starter adds missing tags
 

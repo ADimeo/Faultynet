@@ -125,12 +125,13 @@ class Mininet( object ):
     "Network emulation with hosts spawned in network namespaces."
 
     # pylint: disable=too-many-arguments
-    def __init__( self, topo=None, switch=OVSKernelSwitch, host=Host,
-                  controller=DefaultController, link=Link, intf=Intf,
-                  build=True, xterms=False, cleanup=False, ipBase='10.0.0.0/8',
-                  inNamespace=False,
-                  autoSetMacs=False, autoStaticArp=False, autoPinCpus=False,
-                  listenPort=None, waitConnected=False, faultFilepath=None):
+    def __init__(self, topo=None, switch=OVSKernelSwitch, host=Host,
+                 controller=DefaultController, link=Link, intf=Intf,
+                 faultControllerStarter=ConfigFileFaultControllerStarter,
+                 build=True, xterms=False, cleanup=False, ipBase='10.0.0.0/8',
+                 inNamespace=False,
+                 autoSetMacs=False, autoStaticArp=False, autoPinCpus=False,
+                 listenPort=None, waitConnected=False, faultFilepath=None):
         """Create Mininet object.
            topo: Topo (topology) object or None
            switch: default Switch class
@@ -172,8 +173,8 @@ class Mininet( object ):
         self.listenPort = listenPort
         self.waitConn = waitConnected
 
-        self.faultFilepath = faultFilepath # TODO verify that this file exists?
-        self.faultController = None # TODO move initialisation of faultControllerStarter to here, for config or something?
+        self.faultFilepath = faultFilepath
+        self.faultControllerStarter = faultControllerStarter
 
         self.hosts = []
         self.switches = []
@@ -622,8 +623,6 @@ class Mininet( object ):
                 if src != dst:
                     src.setARP( ip=dst.IP(), mac=dst.MAC() )
 
-    def buildFaultController(self, faultFile):
-        print("TODO")
 
     def start( self ):
         "Start controller and switches."
@@ -650,8 +649,8 @@ class Mininet( object ):
         if self.waitConn:
             self.waitConnected( self.waitConn )
         if self.faultFilepath:
-            self.faultController = ConfigFileFaultControllerStarter(self, self.faultFilepath)
-            self.faultController.go()
+            self.faultControllerStarter = self.faultControllerStarter(self, self.faultFilepath)
+            self.faultControllerStarter.go()
 
     def stop( self ):
         "Stop the controller(s), switches and hosts"
@@ -726,10 +725,10 @@ class Mininet( object ):
     # Probably we should create a tests.py for them
 
     def isFaultControllerActive(self):
-        if self.faultController is None:
+        if self.faultControllerStarter is None:
             return False
         else:
-            return self.faultController.is_active()
+            return self.faultControllerStarter.is_active()
 
     @staticmethod
     def _parsePing( pingOutput ):
