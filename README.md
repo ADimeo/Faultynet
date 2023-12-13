@@ -1,14 +1,10 @@
-# Containernet
-
-<img align="left" width="200" height="200" style="margin: 30px 30px 0 0;" src="/assets/logo.png" />
+# Faultynet
 
 Faultynet is a fork of [Containernet](https://github.com/containernet/containernet), which is a fork of the famous [Mininet](http://mininet.org) network emulator.
 Faultynet introduces a simple-to-use API that allows for the injection of different simulated network- and host-based
 faults.
 At this point in time only the ConfigFile fault controller is implemented, which injects faults based on definitions in a .yml file.
 For more details, see the [FaultControllersREADME](FaulControllersREADME.md) file.
-
-TODO mention THORFI
 
 ## Hello World
 After installation, create a yml file with the following contents:
