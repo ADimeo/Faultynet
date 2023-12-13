@@ -62,9 +62,11 @@ Beyond Mininet's and Containernet's features, Faultynet allows you to
 
 ## Installation
 
-Faultynet comes with two installation and deployment options.
+Faultynets installation has been verified to work on a freshly downloaded Ubuntu 22.04. instance. 
+Older versions of Ubuntu should work with only minimal modifications, but have not been tested at this point in time.
 
-A VM image is TODO
+Since installation instructions include the modification of cgroup settings I recommend installing
+Faultynet in a VM.
 
 ### Option 1: Bare-metal installation
 
