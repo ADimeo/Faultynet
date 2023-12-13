@@ -107,21 +107,3 @@ to the indicated traffic.
 Only available for link_faults.
 #### persistent
 Applies the fault to the given link, with a probability of 100%.
-
-
-## DummyFaultController
-
-This controller does not inject any faults, but can be used to use Faultynets logging setup, or as a baseline to
-implement additional controllers.
-its config file corresponds to `ConfigFileFaultController`, with only the `log` element:
-```ỳml
-log:
-    interval: 1000 # in ms
-    path: "/where/output/file/should/be/stored.json" # string
-    commands:
-        - tag: "command 1" # optional, for identification - defaults to random uuid
-          host: "h1" # on which node to execute. Executes on main OS if missing
-          command: "ip a" # str, actual command to run. Supports shell built ins
-```
-
-After initial activation it will always consider itself active.
