@@ -608,6 +608,8 @@ class NodeInjector:
             return None
 
     async def _inject_burst(self):
+        log.info("Fault %s commencing burst\n" % (self.tag))
+
         burst_config = self.fault_pattern_args
         if len(burst_config) < 2:
             log.error(f"{self.tag} missing fault pattern args for injection\n")
@@ -664,6 +666,8 @@ class NodeInjector:
             log.error(f"{self.tag} has unknown fault type: {self.fault_type}\n")
 
     async def _inject_degradation(self):
+        log.info("Fault %s commencing degradation\n" % (self.tag))
+
         if len(self.fault_pattern_args) >= 4:
             end_degradation = int(self.fault_pattern_args[3])
             # Don't limit to 100, since this isn't percentages
@@ -735,6 +739,8 @@ class NodeInjector:
             log.error(f"{self.tag} has unknown fault type: {self.fault_type}\n")
 
     async def _inject_static(self):
+        log.info("Fault %s commencing persistent\n" % (self.tag))
+
         # Build up
         if self.fault_type == 'custom':
             duration_in_seconds = self.injection_time

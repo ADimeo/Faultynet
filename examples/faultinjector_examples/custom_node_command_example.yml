@@ -16,7 +16,7 @@ faults:
       type: "node_fault:custom"
       type_args: [ 'echo "{}on $(date)" >> custom_node_command_test.txt', 'echo "off $(date)" >> custom_node_command_test.txt' ]
       pattern: "degradation"
-      pattern_args: ['10', 2]
+      pattern_args: ['10', 2000]
       identifiers:
         - "h1"
   - node_fault:
