@@ -57,7 +57,7 @@
   - name: install python-iptables
     pip: name=python-iptables state=latest
 
-  - name: build and install Containernet (using Mininet installer)
+  - name: build and install Faultynet (using Mininet installer)
     shell: PYTHON=python3 faultynet/util/install.sh
     args:
       chdir: /var

@@ -109,7 +109,7 @@ Using Faultynet is very similar to using Containernet or Mininet. If you're inex
 ### Running a basic example
 
 
-Make sure you are in the `Faultynet` directory. You can start a simple example topology with some nodes and some faults
+Make sure you are in the `faultynet` directory. You can start a simple example topology with some nodes and some faults
 through one of the provided examples:
 
 ```bash

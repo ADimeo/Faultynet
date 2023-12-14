@@ -319,7 +319,9 @@ class ConfigFileFaultController:
 
             # type, pattern, type_arg, pattern_arg
             fault_args = fault_dict.get('type_args', None)
-            tag = fault_dict.get('tag', None) # None should never happen, since the starter adds missing tags
+            tag = fault_dict.get('tag', None)
+            if tag is None:
+                tag = str(uuid.uuid4())
 
 
             fault_pattern = fault_dict.get('pattern', 'persistent')
