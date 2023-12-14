@@ -16,7 +16,7 @@ faults:
       type: "node_fault:stress_cpu"
       pattern: "degradation"
       type_args: [20]
-      pattern_args: ['10', 2]
+      pattern_args: ['10', 2000]
       identifiers:
         - "h1"
   - node_fault:
