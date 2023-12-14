@@ -742,7 +742,7 @@ class NodeInjector:
                 # Only start command is present
                 start_command = self.fault_args[0]
                 end_command = None  #
-            elif len(self.fault_args < 1):
+            elif len(self.fault_args) < 1:
                 # No commands are present
                 log.error(f"{self.tag} doesn't have enough arguments! ")
                 start_command = None
@@ -761,7 +761,7 @@ class NodeInjector:
             # Users want n % cpu usage _on a node_ (=cgroup), but the stress-ng takes a global load.
             # To get our in-cpu we reduce the stress instruction by however much cpu is not allowed in our cgroup
             cgroup_fraction = float(self._get_cgroup_size())
-            if len(self.fault_args < 1):
+            if len(self.fault_args) < 1:
                 log.error(f"{self.tag} doesn't define stress intensity! defaulting to 50%")
                 cpu_stress_percentage = 50
             else:
