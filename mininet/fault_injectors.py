@@ -679,13 +679,13 @@ class NodeInjector:
             degradation_step_length = 1000 / 1000
 
         if len(self.fault_pattern_args) >= 1:
-            degradation_step_size = str(self.fault_pattern_args[0])
+            degradation_step_size = int(self.fault_pattern_args[0])
         else:
-            degradation_step_size = str(5)
+            degradation_step_size = int(5)
             log.error(f"{self.tag} does not have enough pattern_args to define degradation step, defaulting to 5")
 
         number_of_steps = int(self.injection_time / degradation_step_length)
-        injection_intensity = start_degradation
+        injection_intensity = int(start_degradation)
 
         if self.fault_type == 'custom':
             if len(self.fault_args) >= 2:
