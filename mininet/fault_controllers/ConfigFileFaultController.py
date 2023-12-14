@@ -269,15 +269,16 @@ class ConfigFileFaultController:
             fault_coroutines.append(i.go())
         if self.fault_logger is not None:
             log_task = asyncio.create_task(self.fault_logger.go())
+            log_task_activator = self.listen_for_log_write()
         log.debug("All faults scheduled.\n")
-        log_task_activator = self.listen_for_log_write()
+
 
         await asyncio.gather(*fault_coroutines)
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_INJECTION_DONE.encode())
         if self.fault_logger is not None:
             self.fault_logger.stop()
             await log_task
-        await log_task_activator
+            await log_task_activator
         # All faults have finished injecting, so send the "done" message
 
     async def listen_for_log_write(self):
@@ -291,7 +292,7 @@ class ConfigFileFaultController:
             log.error("Received unexpected message while waiting for log-to-file message\n")
 
     def _config_logger(self, config):
-        log_config = config.get("log")
+        log_config = config.get("log", None)
         if log_config is None:
             self.fault_logger = None
             return
