@@ -33,8 +33,10 @@ class ConfigFileFaultControllerStarter():
         agnostic_config = self._build_yml_with_mininet_agnostic_identifiers(self.net_reference, config)
 
         if 'log' in config:
+            log.debug("Config has enabled logging\n")
             self.logger_active = True
         else:
+            log.debug("Config has disabled logging\n")
             self.logger_active = False
 
         recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults = Pipe()
