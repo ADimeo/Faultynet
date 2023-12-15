@@ -4,7 +4,8 @@ Faultynet is a fork of [Containernet](https://github.com/containernet/containern
 Faultynet introduces a simple-to-use API that allows for the injection of different simulated network- and host-based
 faults.
 At this point in time only the ConfigFile fault controller is implemented, which injects faults based on definitions in a .yml file.
-For more details, see the [FaultControllersREADME](FaulControllersREADME.md) file.
+For more details on how to use this fault controller see the [FaultControllersREADME](FaulControllersREADME.md) file.
+For more implementation details see the [Documentation](Documentation.md) file. 
 
 ## Hello World
 After installation, create a yml file with the following contents:
@@ -32,8 +33,8 @@ net = Mininet(topo=SimplestTopo(), waitConnected=True, faultFilepath=fault_filep
 net.start()
 ```
 You now have a net with 50% packet loss for the traffic between host h1 and switch s1.
-
-## Features
+## Overrview
+### Features
 Beyond Mininet's and Containernet's features, Faultynet allows you to
 - Define and inject faults into arbitrary interfaces
   - in different patterns, including burst, increasing degradation, random, and persistent
@@ -45,7 +46,7 @@ Beyond Mininet's and Containernet's features, Faultynet allows you to
 - Define custom FaultControllers
 
 
-## Limitations
+### Limitations
 - Only one fault can be injected per interface at the same time
 - Faults can't be injected on bandwidth limited links, or otherwise limited links
 - Faults currently can't be inserted on `Docker` nodes
@@ -59,6 +60,11 @@ Beyond Mininet's and Containernet's features, Faultynet allows you to
   - Most notably, setting tcpdump to listen on an interface will delete nc filters, which disables the redirection fault
 - The minimum burst size for cpu stressing is 1 second
 
+### Planned Features
+- Implementing additional FaultControllers, including ones that dynamically react to the current state of the net
+- Remove limitations, to allow faults on limited links, multiple faults per interface, and within docker containers
+
+
 
 ## Installation
 
@@ -68,7 +74,9 @@ Older versions of Ubuntu should work with only minimal modifications, but have n
 Since installation instructions include the modification of cgroup settings I recommend installing
 Faultynet in a VM.
 
-### Option 1: Bare-metal installation
+An importable VM of Ubuntu server 22.04. with Faultynet installed is available [here](https://drive.google.com/file/d/1J2MAifNj47acilFd-AgacxVR-wNcMHSj/view?usp=drive_link)
+
+### Bare-metal installation
 
 This option is the most flexible. These installation steps were tested for an up-to-date
 freshly set up Ubuntu **22.04 LTS**.
@@ -120,7 +128,7 @@ mirrors how Faultynet might be used in a CI pipeline.
 Each test case comes with a .yml config file which shares its name. To modify the faults injected in the `traffic_with_loss.py` example
 modify the `traffic_with_loss.yml` file in the same folder.
 
-Currently all examples use the only implemented FaultController, `ConfigFileFaultController`, which was designed for
+Currently, all examples use the only implemented FaultController, `ConfigFileFaultController`, which was designed for
 repeatable usage in testing pipelines and offers limited interactivity. This fault controller is automatically started
 when the corresponding net ist started, and faults are activated and deactivated based on a timer.
 For more interactivity, Mininets `CLI()` method can be called and used normally, but due to the timer-based fault scheduling of
