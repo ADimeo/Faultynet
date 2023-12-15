@@ -145,7 +145,7 @@ The documentation for the underlying Mininet project can be found on the [Minine
 
 ### Support
 
-If you have any questions, please use GitHub's [issue system](https://github.com/ADimeo/Faultynet/issues).
+If you have any questions, please use GitHub's [issue system](https://github.com/ADimeo/Faultynet/issues), or shoot me an email at antonio.dimeo@student.hpi.de
 
 ### Contribute
 
