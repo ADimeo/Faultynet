@@ -68,14 +68,18 @@ class LinkInjector:
 
         self.fault_type = fault_type
         self.fault_pattern = fault_pattern
+
+        if not isinstance(fault_pattern_args, list):
+            log.warn("fault_patterns are not a list, are you sure that is what you want?\n")
         self.fault_pattern_args = fault_pattern_args
+
+        if not isinstance(fault_args, list):
+            log.warn("fault_args are not a list, are you sure that is what you want?\n")
         self.fault_args = fault_args
 
         self.pre_injection_time = pre_injection_time
         self.injection_time = injection_time
         self.post_injection_time = post_injection_time
-
-
 
         self.target_protocol_table = {
             'ICMP': '1',

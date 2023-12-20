@@ -32,7 +32,7 @@ class ConfigFileFaultControllerStarter():
         config = self._get_base_config_dict(filepath_to_config_file)
         agnostic_config = self._build_yml_with_mininet_agnostic_identifiers(self.net_reference, config)
 
-        if 'log' in config:
+        if 'log' in agnostic_config:
             log.debug("Config has enabled logging\n")
             self.logger_active = True
         else:
@@ -41,6 +41,7 @@ class ConfigFileFaultControllerStarter():
 
         recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults = Pipe()
         recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet = Pipe()
+
         fault_process = Process(target=entrypoint_for_fault_controller, args=(
             agnostic_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet,
             send_pipe_faults_to_mininet))
@@ -273,7 +274,6 @@ class ConfigFileFaultController:
             log_task = asyncio.create_task(self.fault_logger.go())
             log_task_activator = self.listen_for_log_write()
         log.debug("All faults scheduled.\n")
-
 
         await asyncio.gather(*fault_coroutines)
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_INJECTION_DONE.encode())
