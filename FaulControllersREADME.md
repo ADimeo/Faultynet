@@ -1,17 +1,18 @@
 # FaultControllers README
 
-This document describes in detail the different FaultControllers currently implemented in FaultyNet
+This document describes in detail the different FaultControllers currently implemented in FaultyNet. 
+Each FaultController implements both a FaultController, and a FaultControllerStarter. For details see the [Faultynet Documentation](Documentation.md).
 
 ## ConfigFileFaultController
-ConfigFileFaultController was designed for repeatable usage in testing pipelines and offers limited interactivity.
+`ConfigFileFaultController`was designed for repeatable usage in testing pipelines and offers limited interactivity.
 This fault controller is automatically started when the corresponding net ist started, and faults are activated 
 and deactivated based on a timer. After all faults have terminated `ConfigFileFaultController` shuts itself down.
 Usually this means that the controller will run for `max(pre_injection_time + injection_time + post_injection_time)`.
 
-The ConfigFileFaultController injects faults based on a .yml configuration file. `ConfigFileFaultController` currently 
+The `ConfigFileFaultController` injects faults based on a .yml configuration file. `ConfigFileFaultController` currently 
 does not support nodes or links that were added during runtime.
 
-This is the full reference for the config file;
+This is the full reference for the config file:
 ```yml
 ---
 faults:
@@ -107,3 +108,38 @@ to the indicated traffic.
 Only available for link_faults.
 #### persistent
 Applies the fault to the given link, with a probability of 100%.
+
+
+## RandomLinkFaultController
+`RandomLinkFaultController` was designed for simple chaos-monkey style tests. The Controller starts by injecting faults on
+`start_links` links in the first iteration.
+Once this iteration is done, it injects faults on  `start_links + 1` links, until it finally injects faults into `end_links` links.
+Afterward the controller terminates. Each iteration runs for `injection_time` seconds.
+
+`RandomLinkFaultController` supports two modes, defined via `mode`: In `"automatic"` mode, an iteration is started immediately
+after the previous iteration finishes. In `manual` mode, each iteration is started only after the 
+`RandomLinkFaultControllerStarter.start_next_run()` function is called. This includes the first iteration, which is not immediately
+started after calling `go()`. `go()` still needs to be called before any calls to `start_next_run()`, to activate the Controller.
+
+The fault to inject is defined comparable to `ConfigFileFaultController`, but only a single fault type can be defined.
+All link-based faults are supported. RandomLinkFaultController supports the same `log` structure as `ConfigFileFaultController`.
+
+This is the full reference for the config file:
+```yml
+---
+start_links: 1 # Number of links to inject faults into in first iteration
+end_links: 9  # Number of links to inject faults into in last iteration
+mode: "manual" # "manual" or "automatic", whether the next iteration is triggered automatically
+fault_type: "link_fault:corrupt" # See ConfigFileFaultController 
+type_args: [] # See ConfigFileFaultController 
+pattern: "random" # See ConfigFileFaultController 
+pattern_args: ["14"] # See ConfigFileFaultController 
+injection_time: 8 # How long each iteration takes
+target_traffic: # See ConfigFileFaultController 
+  protocol: "any" # See ConfigFileFaultController 
+  src_port: 0 # See ConfigFileFaultController 
+  dst_port: 0 # See ConfigFileFaultController 
+log: # Enable logging, without modifying options
+...
+```
+
