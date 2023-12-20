@@ -48,7 +48,7 @@ class RandomLinkFaultControllerStarter():
         fault_process = Process(target=entrypoint_for_fault_controller, args=(
             controller_config, self.recv_pipe_mininet_to_faults,
             self.send_pipe_mininet_to_faults, self.recv_pipe_faults_to_mininet,
-            self.send_pipe_faults_to_mgininet))
+            self.send_pipe_faults_to_mininet))
 
         fault_process.start()
 
@@ -106,7 +106,10 @@ class RandomLinkFaultControllerStarter():
 
         atexit.register(notify_controller_of_shutdown, self.send_pipe_mininet_to_faults)
 
-    # TODO implement a "stop"function
+    def stop(self):
+        """Tells the FaultController to shut down the next iteration"""
+        self.send_pipe_mininet_to_faults.send_bytes(MESSAGE_SHUTDOWN.encode())
+
     def start_next_run(self):
         """Tells the FaultController to start the next iteration"""
         self.send_pipe_mininet_to_faults.send_bytes(MESSAGE_START_NEXT_RUN.encode())
@@ -256,6 +259,7 @@ class RandomLinkFaultController:
         self.config = controller_config
         self.fault_logger = None  # set in config_logger
         self.do_next_run = None # set in _configByFile
+        self.is_active = False
 
         self.recv_pipe_mininet_to_faults = recv_pipe_mininet_to_faults
         self.send_pipe_mininet_to_faults = send_pipe_mininet_to_faults
@@ -274,11 +278,11 @@ class RandomLinkFaultController:
             return True
         elif self.mode == "manual":
             log.debug("Starting wait for run...\n")
-            while self.do_next_run is False:
+            while self.do_next_run is False and self.is_active is True:
                 await asyncio.sleep(0)
                 continue
             self.do_next_run = False
-            log.debug("Done waiting for run...\n")
+            log.debug("Done waiting for run...\n") # either because it's starting, or because we're stopping
             return True
         else:
             log.error(f"FaultController running in unknown mode: {self.mode}\n")
@@ -290,12 +294,10 @@ class RandomLinkFaultController:
         if potential_go_message == MESSAGE_START_INJECTING.encode():
             asyncio.run(self.go())
 
-    # TODO also build a eternal fault injector that listens to a stop signal
-    # and sets local "stopped" variable
 
-    # TODO allow interrupt/stop: Listen on each run whether it was stopped?
     async def go(self):
         log.debug("Initiating faults\n")
+        self.is_active = True
 
         if self.fault_logger is not None:
             log_task = asyncio.create_task(self.fault_logger.go())
@@ -309,9 +311,10 @@ class RandomLinkFaultController:
             fault_coroutines = []
 
             await self._wait_for_next_run()
+            if not self.is_active:
+                break
 
             links_to_inject = random.sample(self.target_links_list, number_of_links_to_inject)
-            # TODO also check for stopped
 
             for link_information_tuple in links_to_inject:
                 injector0, injector1 = self._get_injectors_for_link(link_information_tuple)
@@ -325,7 +328,7 @@ class RandomLinkFaultController:
             await asyncio.gather(*fault_coroutines)
             log.debug("Fault iteration is done\n")
 
-
+        self.is_active = False
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_INJECTION_DONE.encode())
         if self.fault_logger is not None:
             self.fault_logger.stop()
@@ -390,9 +393,10 @@ class RandomLinkFaultController:
             message_in_pipe = self.recv_pipe_mininet_to_faults.recv_bytes()
 
             if message_in_pipe == MESSAGE_SHUTDOWN.encode():
-                log.debug("FaultController received message for shutdown\n")
+                log.info("FaultController received message for shutdown\n")
                 # This is a terminating message - after this we need to return for the controller to shut down,
                 # and no other messages will be received
+                self.is_active = False
                 if self.fault_logger is not None:
                     self.fault_logger.stop()
                 return

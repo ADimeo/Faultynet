@@ -120,6 +120,8 @@ Afterward the controller terminates. Each iteration runs for `injection_time` se
 after the previous iteration finishes. In `manual` mode, each iteration is started only after the 
 `RandomLinkFaultControllerStarter.start_next_run()` function is called. This includes the first iteration, which is not immediately
 started after calling `go()`. `go()` still needs to be called before any calls to `start_next_run()`, to activate the Controller.
+The fault controller can be prematurely shut down by calling `RandomLinkFaultControllerStarter.stop()`. This will shut the
+controller down after the current iteration finishes.
 
 The fault to inject is defined comparable to `ConfigFileFaultController`, but only a single fault type can be defined.
 All link-based faults are supported. RandomLinkFaultController supports the same `log` structure as `ConfigFileFaultController`.

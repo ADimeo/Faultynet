@@ -55,12 +55,12 @@ async def degradation_command_test(net: Mininet):
     # Runs with link_degradation_example.yml
 
     h1 = net.hosts[0] # h1.cmd("ip a") 10.0.0.1
-    for i in range (10):
+    for i in range (5):
         h1.cmd("ping -w 9 10.0.0.7") # This should indicate packet corruption
         time.sleep(3)
         net.faultControllerStarter.start_next_run()
-
-    # TODO add premature stop here
+    # Controller is stopped prematurely
+    net.faultControllerStarter.stop()
 
 def fault_example_scenario():
     fault_filepath = str(pathlib.Path(__file__).parent.resolve()) + "/random_link_example.yml"
