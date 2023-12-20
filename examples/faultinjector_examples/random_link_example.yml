@@ -1,0 +1,15 @@
+---
+fault_type: "link_fault:corrupt"
+type_args: []
+pattern: "random"
+pattern_args: ["14"]
+start_links: 1
+end_links: 9
+injection_time: 8
+target_traffic:
+  protocol: "any"
+  src_port: 0
+  dst_port: 1
+mode: "manual" # "manual" or "automatic"
+log: # Enable logging, without modifying options
+...
