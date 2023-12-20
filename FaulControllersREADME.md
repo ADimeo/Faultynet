@@ -112,14 +112,17 @@ Applies the fault to the given link, with a probability of 100%.
 
 ## RandomLinkFaultController
 `RandomLinkFaultController` was designed for simple chaos-monkey style tests. The Controller starts by injecting faults on
-`start_links` links in the first iteration.
+`start_links` links in the first iteration. Each iteration runs for `injection_time` seconds.
 Once this iteration is done, it injects faults on  `start_links + 1` links, until it finally injects faults into `end_links` links.
-Afterward the controller terminates. Each iteration runs for `injection_time` seconds.
+Afterward the controller terminates, unless in `repeating`mode. In `repeating` mode, the controller starts
+from the beginning, e.g. injects `start_links` random links with faults.
 
-`RandomLinkFaultController` supports two modes, defined via `mode`: In `"automatic"` mode, an iteration is started immediately
+`RandomLinkFaultController` supports three modes, defined via `mode`: In `"automatic"` mode, an iteration is started immediately
 after the previous iteration finishes. In `manual` mode, each iteration is started only after the 
 `RandomLinkFaultControllerStarter.start_next_run()` function is called. This includes the first iteration, which is not immediately
 started after calling `go()`. `go()` still needs to be called before any calls to `start_next_run()`, to activate the Controller.
+The third mode is `repeating`, which behaves exactly as `manual` mode, with the difference that after the iteration with
+`end_links` injection targets it begins anew with `start_links` injection targets.
 The fault controller can be prematurely shut down by calling `RandomLinkFaultControllerStarter.stop()`. This will shut the
 controller down after the current iteration finishes.
 
@@ -131,7 +134,7 @@ This is the full reference for the config file:
 ---
 start_links: 1 # Number of links to inject faults into in first iteration
 end_links: 9  # Number of links to inject faults into in last iteration
-mode: "manual" # "manual" or "automatic", whether the next iteration is triggered automatically
+mode: "manual" # "manual", "automatic", or "repeating" whether the next iteration is triggered automatically, whether it should stop by itself
 fault_type: "link_fault:corrupt" # See ConfigFileFaultController 
 type_args: [] # See ConfigFileFaultController 
 pattern: "random" # See ConfigFileFaultController 

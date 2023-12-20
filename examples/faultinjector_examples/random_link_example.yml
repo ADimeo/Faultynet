@@ -4,12 +4,12 @@ type_args: []
 pattern: "random"
 pattern_args: ["14"]
 start_links: 1
-end_links: 9
+end_links: 3
 injection_time: 8
 target_traffic:
   protocol: "any"
   src_port: 0
   dst_port: 0
-mode: "manual" # "manual" or "automatic"
+mode: "repeating" # "manual", "automatic", or "repeating"
 log: # Enable logging, without modifying options
 ...

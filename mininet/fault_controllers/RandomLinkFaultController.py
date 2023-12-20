@@ -276,7 +276,7 @@ class RandomLinkFaultController:
     async def _wait_for_next_run(self):
         if self.mode == "automatic":
             return True
-        elif self.mode == "manual":
+        elif self.mode == "manual" or self.mode == "repeating":
             log.debug("Starting wait for run...\n")
             while self.do_next_run is False and self.is_active is True:
                 await asyncio.sleep(0)
@@ -303,30 +303,17 @@ class RandomLinkFaultController:
             log_task = asyncio.create_task(self.fault_logger.go())
         pipe_listener_task = asyncio.create_task(self.listen_for_pipe_messages())
 
-
-
         end_number_of_links = min(self.end_number_of_links, len(self.target_links_list))
-        for number_of_links_to_inject in range(self.start_number_of_links, end_number_of_links + 1):
-            faults_for_run = []
-            fault_coroutines = []
-
-            await self._wait_for_next_run()
-            if not self.is_active:
+        while True:
+            for number_of_links_to_inject in range(self.start_number_of_links, end_number_of_links + 1):
+                await self._wait_for_next_run()
+                if not self.is_active:
+                    break
+                await self._do_iteration_with_n_links(number_of_links_to_inject)
+            if self.mode != "repeating" or not self.is_active:
+                # Only run this once if our mode isn't repeating,
+                # otherwise run until we're deactivated
                 break
-
-            links_to_inject = random.sample(self.target_links_list, number_of_links_to_inject)
-
-            for link_information_tuple in links_to_inject:
-                injector0, injector1 = self._get_injectors_for_link(link_information_tuple)
-                faults_for_run.append(injector0)
-                faults_for_run.append(injector1)
-
-            log.info(f"Injecting faults on {number_of_links_to_inject} links\n")
-            for i in faults_for_run:
-                fault_coroutines.append(i.go())
-
-            await asyncio.gather(*fault_coroutines)
-            log.debug("Fault iteration is done\n")
 
         self.is_active = False
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_INJECTION_DONE.encode())
@@ -335,6 +322,24 @@ class RandomLinkFaultController:
             await log_task
         await  asyncio.gather(pipe_listener_task)
         # All faults have finished injecting, so send the "done" message
+
+    async def _do_iteration_with_n_links(self, number_of_links_to_inject):
+        faults_for_run = []
+        fault_coroutines = []
+
+        links_to_inject = random.sample(self.target_links_list, number_of_links_to_inject)
+
+        for link_information_tuple in links_to_inject:
+            injector0, injector1 = self._get_injectors_for_link(link_information_tuple)
+            faults_for_run.append(injector0)
+            faults_for_run.append(injector1)
+
+        log.info(f"Injecting faults on {number_of_links_to_inject} links\n")
+        for i in faults_for_run:
+            fault_coroutines.append(i.go())
+
+        await asyncio.gather(*fault_coroutines)
+        log.debug("Fault iteration is done\n")
 
     def _get_injectors_for_link(self, link_information_tuple):
         # (pid, interface name, node name), (pid, interface_name, node_name))
