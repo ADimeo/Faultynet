@@ -69,11 +69,11 @@ class LinkInjector:
         self.fault_type = fault_type
         self.fault_pattern = fault_pattern
 
-        if not isinstance(fault_pattern_args, list):
+        if not isinstance(fault_pattern_args, list) and fault_pattern_args is not None:
             log.warn("fault_patterns are not a list, are you sure that is what you want?\n")
         self.fault_pattern_args = fault_pattern_args
 
-        if not isinstance(fault_args, list):
+        if not isinstance(fault_args, list) and fault_args is not None:
             log.warn("fault_args are not a list, are you sure that is what you want?\n")
         self.fault_args = fault_args
 

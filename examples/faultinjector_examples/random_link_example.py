@@ -18,7 +18,6 @@ from mininet.util import custom
 
 flush = sys.stdout.flush
 class SimpleExampleTopo(Topo):
-    """Three hosts connected to a switch"""
     # pylint: disable=arguments-differ
     def build(self, N=0, **params):
         # Create switches and hosts
