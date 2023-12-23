@@ -1,18 +1,19 @@
-"""RandomLinkFaultController implements a fault injector that injects faults on randomly chosen links.
+"""MostUsedLinkFaultController implements a fault injector that injects faults on the link that had the most traffic during the last run
  For details, see FaultControllersREADME.md"""
 import asyncio
-import random
 import re
 import atexit
 import sys
 import uuid
 
 from multiprocessing import Pipe, Process
+from subprocess import run
 
 import yaml
 
 from mininet import log
 from mininet.faultlogger import FaultLogger
+from mininet.fault_controllers.AgnosticLink import AgnosticLink
 from mininet.node import Node
 from mininet.fault_injectors import LinkInjector
 
@@ -24,7 +25,7 @@ MESSAGE_SHUTDOWN = "m_write_logs"
 MESSAGE_START_NEXT_RUN = "m_faultinjector_next"
 
 
-class RandomLinkFaultControllerStarter():
+class MostUsedLinkFaultControllerStarter():
 
     def __init__(self, net_reference: 'Mininet', filepath_to_config_file=None):
         self.net_reference = net_reference
@@ -173,9 +174,9 @@ class RandomLinkFaultControllerStarter():
             int, str, str, str):
         """Takes a string in our node presentation, which can either be a node name (h1), arrow notation (h1->s1),
         or arrow notation with interfaces (h1->s1:eth0)"""
-        corresponding_interface_name, corresponding_host = RandomLinkFaultControllerStarter._get_node_and_interface_name_from_identifier_string(
+        corresponding_interface_name, corresponding_host = MostUsedLinkFaultControllerStarter._get_node_and_interface_name_from_identifier_string(
             net, identifier_string)
-        process_group_id, interface_name = RandomLinkFaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
+        process_group_id, interface_name = MostUsedLinkFaultControllerStarter._get_passable_identifiers_from_node_and_interface_name(
             corresponding_interface_name, corresponding_host)
         return process_group_id, interface_name, identifier_string
 
@@ -258,7 +259,7 @@ class RandomLinkFaultControllerStarter():
         return process_group_id, interface_name
 
 
-class RandomLinkFaultController:
+class MostUsedLinkFaultController:
     def __init__(self, controller_config, recv_pipe_mininet_to_faults, send_pipe_mininet_to_faults,
                  recv_pipe_faults_to_mininet, send_pipe_faults_to_mininet):
         self.config = controller_config
@@ -274,6 +275,7 @@ class RandomLinkFaultController:
 
         self._configByFile(self.config)
         self._config_logger(self.config)
+        self.links_to_inject = []
 
         log.debug("FI: Sending setup finished command\n")
         self.send_pipe_faults_to_mininet.send_bytes(MESSAGE_SETUP_DONE.encode())
@@ -332,10 +334,26 @@ class RandomLinkFaultController:
         faults_for_run = []
         fault_coroutines = []
 
-        links_to_inject = random.sample(self.target_links_list, number_of_links_to_inject)
+        uninjected_links =  list(set(self.target_links_list) - set(self.links_to_inject))
+        most_trafficed_link = None
+        max_traffic_on_link = -1
 
-        for link_information_tuple in links_to_inject:
-            injector0, injector1 = self._get_injectors_for_link(link_information_tuple)
+        for i, link_information in enumerate(uninjected_links):
+            traffic_on_link = self._get_traffic_on_link(link_information)
+            old_traffic = link_information.traffic
+            traffic_since_last_run = traffic_on_link - old_traffic
+            uninjected_links[i].traffic = traffic_on_link
+
+            if traffic_since_last_run > max_traffic_on_link:
+                most_trafficed_link = link_information
+                max_traffic_on_link = traffic_since_last_run
+
+
+
+        if most_trafficed_link is not None:
+            self.links_to_inject.append(most_trafficed_link)
+        for link in self.links_to_inject:
+            injector0, injector1 = self._get_injectors_for_link(link)
             faults_for_run.append(injector0)
             faults_for_run.append(injector1)
 
@@ -346,17 +364,31 @@ class RandomLinkFaultController:
         await asyncio.gather(*fault_coroutines)
         log.debug("Fault iteration is done\n")
 
-    def _get_injectors_for_link(self, link_information_tuple):
+    def _get_traffic_on_link(self, link_information:AgnosticLink):
+        base_command = f"nsenter --target {str(link_information.link1_pid)} --net --pid --all "
+        command_to_execute_rx = "ifconfig " + link_information.link1_name + """ | grep  "RX packets" | awk '{print $3}'"""
+        command_to_execute_tx = "ifconfig " + link_information.link1_name + """ | grep "TX packets" | awk '{print $3}'"""
+
+        completed_process_rx = run(base_command + command_to_execute_rx, capture_output=True, text=True, shell=True)
+        completed_process_tx = run(base_command + command_to_execute_tx, capture_output=True, text=True, shell=True)
+        number_of_received_packets = int(completed_process_rx.stdout)
+        number_of_transmitted_packets = int(completed_process_tx.stdout)
+        log.debug(f"link {link_information.link1_node_name}->{link_information.link2_node_name} has usage of {str(number_of_transmitted_packets + number_of_received_packets)}\n")
+
+        return number_of_transmitted_packets + number_of_received_packets
+
+
+
+    def _get_injectors_for_link(self, link_element:AgnosticLink):
         # (pid, interface name, node name), (pid, interface_name, node_name))
-        link_information_tuple = list(link_information_tuple)
-        target_pid_0 = link_information_tuple[0][0]
-        target_pid_1 = link_information_tuple[1][0]
+        target_pid_0 = link_element.link1_pid
+        target_pid_1 = link_element.link2_pid
 
-        target_interface_0 = link_information_tuple[0][1]
-        target_interface_1 = link_information_tuple[1][1]
+        target_interface_0 = link_element.link1_name
+        target_interface_1 = link_element.link2_name
 
-        target_nodename_0 = link_information_tuple[0][2]
-        target_nodename_1 = link_information_tuple[1][2]
+        target_nodename_0 = link_element.link1_node_name
+        target_nodename_1 = link_element.link2_node_name
 
         tag_0 = f"{target_nodename_0}:{target_interface_0}->{target_nodename_1}:{target_interface_1}"
         tag_1 = f"{target_nodename_1}:{target_interface_1}->{target_nodename_0}:{target_interface_0}"
@@ -437,7 +469,17 @@ class RandomLinkFaultController:
 
         self.start_number_of_links = int(config.get("start_links", 1))
         self.end_number_of_links = int(config.get("end_links",  sys.maxsize)) # defaults to "as many links as we have" in go()
-        self.target_links_list = config.get("links", None)
+        target_links_list = config.get("links", None)
+        self.target_links_list = []
+        for link_tuple in target_links_list:
+            link_tuple = list(link_tuple)
+            corresponding_link_object = AgnosticLink(link1_pid=link_tuple[0][0],
+                                        link1_name=link_tuple[0][1],
+                                                     link1_node_name=link_tuple[0][2],
+                                                     link2_pid=link_tuple[1][0],
+                                                     link2_name=link_tuple[1][1],
+                                                     link2_node_name=link_tuple[1][2])
+            self.target_links_list.append(corresponding_link_object)
 
         self.mode = config.get("mode", "automatic")
         self.do_next_run = False # Starting immediately after "go" seems unintuitive
@@ -491,9 +533,9 @@ class RandomLinkFaultController:
 def entrypoint_for_fault_controller(controller_config: dict, recv_pipe_mininet_to_faults,
                                     send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet,
                                     send_pipe_faults_to_mininet):
-    main_injector = RandomLinkFaultController(controller_config, recv_pipe_mininet_to_faults,
-                                              send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet,
-                                              send_pipe_faults_to_mininet)
+    main_injector = MostUsedLinkFaultController(controller_config, recv_pipe_mininet_to_faults,
+                                                send_pipe_mininet_to_faults, recv_pipe_faults_to_mininet,
+                                                send_pipe_faults_to_mininet)
     main_injector.wait_until_go()
 
 
