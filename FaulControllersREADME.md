@@ -3,6 +3,26 @@
 This document describes in detail the different FaultControllers currently implemented in FaultyNet. 
 Each FaultController implements both a FaultController, and a FaultControllerStarter. For details see the [Faultynet Documentation](Documentation.md).
 
+## LogOnlyFaultController
+`LogOnlyFaultController` is a minimalist FaultController. It doesn't inject any faults, but does provide easy access
+to FaultyNets logging system, which allows for scheduled execution of arbitrary commands on arbitrary hosts.
+All other currently implemented FaultControllers also support this logging syntax.
+For details about the logs, read the [Faultynet Documentation](Documentation.md)
+
+This is the full reference for the config file:
+```yml
+---
+log:
+    interval: 1000 # in ms
+    path: "/where/output/file/should/be/stored.json" # string, defaults to faultynet_faultlogfile.json
+    commands:
+        - tag: "command 1" # optional, for identification - defaults to random uuid
+          host: "h1" # on which node to execute. Executes on main OS if missing
+          command: "ip a" # str, actual command to run. Supports shell built ins
+        - command: "ip a" # this command will execute on the main host, with a random uuid tag
+...
+```
+
 ## ConfigFileFaultController
 `ConfigFileFaultController`was designed for repeatable usage in testing pipelines and offers limited interactivity.
 This fault controller is automatically started when the corresponding net ist started, and faults are activated 
@@ -11,6 +31,7 @@ Usually this means that the controller will run for `max(pre_injection_time + in
 
 The `ConfigFileFaultController` injects faults based on a .yml configuration file. `ConfigFileFaultController` currently 
 does not support nodes or links that were added during runtime.
+If the `log` tag is present, Faultynet will write logs to the given file.
 
 This is the full reference for the config file:
 ```yml
@@ -54,9 +75,7 @@ log:
         - command: "ip a" # this command will execute on the main host, with a random uuid tag
 ...
 ```
-### Logs
-If the `log` tag is present, Faultynet will write logs to the given file. For details about the logs, read the 
-[Faultynet Documentation](Documentation.md)
+
 
 ### Types
 For additional details about link_fault `type`s before the semicolon use `man tc-netem`.
@@ -127,7 +146,7 @@ The fault controller can be prematurely shut down by calling `RandomLinkFaultCon
 controller down after the current iteration finishes.
 
 The fault to inject is defined comparable to `ConfigFileFaultController`, but only a single fault type can be defined.
-All link-based faults are supported. RandomLinkFaultController supports the same `log` structure as `ConfigFileFaultController`.
+All link-based faults are supported. `RandomLinkFaultController` supports the same `log` structure as `ConfigFileFaultController`.
 
 This is the full reference for the config file:
 ```yml
@@ -137,6 +156,7 @@ end_links: 9  # Number of links to inject faults into in last iteration
 mode: "manual" # "manual", "automatic", or "repeating" whether the next iteration is triggered automatically, whether it should stop by itself
 fault_type: "link_fault:corrupt" # See ConfigFileFaultController 
 type_args: [] # See ConfigFileFaultController 
+nodes_blacklist: ['h1'] # Links which include this node will be ignored by the FaultController.
 pattern: "random" # See ConfigFileFaultController 
 pattern_args: ["14"] # See ConfigFileFaultController 
 injection_time: 8 # How long each iteration takes
@@ -148,3 +168,38 @@ log: # Enable logging, without modifying options
 ...
 ```
 
+## MostUsedFaultController 
+`MostUsedFaultCOntroller` was designed to illustrate the possibilities of injecting faults based on runtime net behavior.
+For each iteration, the fault controller checks which link was the most trafficked since the last iteration of the
+controller. For the first iteration this is the traffic since creation of the associated interface.
+Once this link is identified it is added to the pool of links that should contain a fault during the next iteration,
+so in the nth iteration the n most trafficked links will be faulty.
+
+The fault to inject is defined comparable to `RandomLinkFaultController`. `MostUsedFaultController` supports the same `mode`
+attributes as `RandomLinkFaultController`, but it does not support the `start_links` attribute.
+
+All link-based faults are supported. `MostUsedFaultController` supports the same `log` structure as `ConfigFileFaultController`.
+
+This is the full reference for the config file:
+
+```yml
+---
+end_links: 9  # Number of links to inject faults into in last iteration
+mode: "manual" # "manual", "automatic", or "repeating" whether the next iteration is triggered automatically, whether it should stop by itself
+fault_type: "link_fault:corrupt" # See ConfigFileFaultController 
+type_args: [] # See ConfigFileFaultController 
+nodes_blacklist: ['h1'] # Links which include this node will be ignored by the FaultController.
+pattern: "random" # See ConfigFileFaultController 
+pattern_args: ["14"] # See ConfigFileFaultController 
+injection_time: 8 # How long each iteration takes
+target_traffic: # See ConfigFileFaultController 
+  protocol: "any" # See ConfigFileFaultController 
+  src_port: 0 # See ConfigFileFaultController 
+  dst_port: 0 # See ConfigFileFaultController 
+log: # Enable logging, without modifying options
+...
+```
+
+## Implementing your own FaultController
+
+See [Documentation](Documentation.md)

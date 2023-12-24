@@ -1,6 +1,6 @@
 # Faultynet Documentation
 
-Most Faultynet behavior is Faultcontroller specific. For details on Faultcontrollers, see [FaultControllersREADME.md](FaultControllersREADME.md)
+Most Faultynet behavior is Faultcontroller specific. For details on existing Faultcontrollers, see [FaultControllersREADME.md](FaultControllersREADME.md)
 
 When creating a `Mininet()` instance, the constructor accepts two new arguments: 
   - `faultControllerStarter`, which refers to a class, and defaults to `ConfigFileFaultControllerStarter`
@@ -25,10 +25,30 @@ it about the `FaultController`s state.
 It is strongly encouraged to run the `FaultController` in a different process from the main Mininet instance. 
 The reason for this recommendation is that some aspects of Mininet, specifically the execution of long-running commands 
 on a node, are blocking, and would prevent other parts of the system from running at the same time, which can lead to 
-faults not being injected when they should, or faultlogs being generated incorrectly.
+faults not being injected when they should, or fault logs being generated incorrectly.
+
+
+The simplest way of implementing a new `FaultController` is using the existing `BaseFaultController` and `BaseFaultControllerStarter`,
+which handles both communication between both classes and a number of additional things.
+
+## Building upon BaseFaultController
+In your `Starter`, set the `controller_class` value to your custom `FaultController` class. Override the `make_controller_config`
+method to transform the user-provided yml into a configuration that contains all information that the `FaultController`
+requires. This commonly means identifying process IDs for nodes, as well as interface names.
+`BaseFaultController` contains a number of methods that make this process easier, like `get_controller_log_dict`. For more details
+see the source code.
+
+In your custom `FaultController` class, override both the `_configByFile` function and the `go` function.
+`_configByFile` is the equivalent to the Starters `get_controller_log_dict` function: It gets the output of `get_controller_log_dict`
+as input, and its responsibility is to set all required local variables based on that input. It is called in
+`BaseFaultController`s `init` method.
+
+The `go` function contains the actual injection logic. `go` is executed when the `Starter`s `go` method is called.
+It is important to call `await super().go()` before running custom code, and to call `await self.deactivate_and_send_done_message()`
+once the controller is done with its work. If those function calls are not performed things will break.
 
 ## Injecting Faults
-To inject a fault, construct a `LinkInjector` or a `NodeInjector`, and launch it with the `go()`.
+To inject a fault, construct a `LinkInjector` or a `NodeInjector`, and launch them with the `go()`.
 Currently `LinkInjector`s and `NodeInjectors` exist. Their interfaces are well commented, but for clarity:
 - Each FaultController injects exactly one fault, on one node or interface. 
   - This means that injecting a fault on one link requires to `LinkInjector`s, one for each interface at the ends of the link

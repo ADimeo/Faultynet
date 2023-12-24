@@ -35,11 +35,11 @@ class MostUsedLinkFaultController(BaseFaultController):
 
         end_number_of_links = min(self.end_number_of_links, len(self.target_links_list))
         while True:
-            for number_of_links_to_inject in range(self.start_number_of_links, end_number_of_links + 1):
+            for _ in range(1,end_number_of_links+1):
                 await self._wait_for_next_run()
                 if not self.is_active:
                     break
-                await self._do_iteration_with_n_links(number_of_links_to_inject)
+                await self._do_next_iteration()
             if self.mode != "repeating" or not self.is_active:
                 # Only run this once if our mode isn't repeating,
                 # otherwise run until we're deactivated
@@ -48,12 +48,12 @@ class MostUsedLinkFaultController(BaseFaultController):
         # All faults have finished injecting, so send the "done" message
         await self.deactivate_and_send_done_message()
 
-    async def _do_iteration_with_n_links(self, number_of_links_to_inject):
+    async def _do_next_iteration(self):
         faults_for_run = []
         fault_coroutines = []
 
         uninjected_links =  list(set(self.target_links_list) - set(self.links_to_inject))
-        most_trafficed_link = None
+        most_trafficked_link = None
         max_traffic_on_link = -1
 
         for i, link_information in enumerate(uninjected_links):
@@ -63,19 +63,19 @@ class MostUsedLinkFaultController(BaseFaultController):
             uninjected_links[i].traffic = traffic_on_link
 
             if traffic_since_last_run > max_traffic_on_link:
-                most_trafficed_link = link_information
+                most_trafficked_link = link_information
                 max_traffic_on_link = traffic_since_last_run
 
 
 
-        if most_trafficed_link is not None:
-            self.links_to_inject.append(most_trafficed_link)
+        if most_trafficked_link is not None:
+            self.links_to_inject.append(most_trafficked_link)
         for link in self.links_to_inject:
             injector0, injector1 = self._get_injectors_for_link(link)
             faults_for_run.append(injector0)
             faults_for_run.append(injector1)
 
-        log.info(f"Injecting faults on {number_of_links_to_inject} links\n")
+        log.info(f"Injecting faults on {len(self.links_to_inject)} links\n")
         for i in faults_for_run:
             fault_coroutines.append(i.go())
 
@@ -83,6 +83,10 @@ class MostUsedLinkFaultController(BaseFaultController):
         log.debug("Fault iteration is done\n")
 
     def _get_traffic_on_link(self, link_information:AgnosticLink):
+        # We only check one side of the link here. That might cause weird behavior if a link loses a lot of traffic
+        # (since both sides of the link won't be balanced.
+        # This is not an issue, since for this controller we only check faultless links.
+        # For more complex controllers checking both sides of the link will sometimes yield more intuitive results.
         base_command = f"nsenter --target {str(link_information.link1_pid)} --net --pid --all "
         command_to_execute_rx = "ifconfig " + link_information.link1_name + """ | grep  "RX packets" | awk '{print $3}'"""
         command_to_execute_tx = "ifconfig " + link_information.link1_name + """ | grep "TX packets" | awk '{print $3}'"""
@@ -145,7 +149,6 @@ class MostUsedLinkFaultController(BaseFaultController):
     def _configByFile(self, config):
         """Reconfigures this controller according to the given file """
 
-        self.start_number_of_links = int(config.get("start_links", 1))
         self.end_number_of_links = int(config.get("end_links",  sys.maxsize)) # defaults to "as many links as we have" in go()
         target_links_list = config.get("links", None)
 

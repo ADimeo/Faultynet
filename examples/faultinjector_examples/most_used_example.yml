@@ -2,7 +2,6 @@
 fault_type: "link_fault:down"
 type_args: []
 pattern: "persistent"
-start_links: 1
 end_links: 5
 injection_time: 5
 mode: "manual" # "manual", "automatic", or "repeating"
