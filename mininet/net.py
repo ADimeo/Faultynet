@@ -685,7 +685,8 @@ class Mininet( object ):
             info( host.name + ' ' )
             host.terminate()
         info( '\n*** Done\n' )
-
+        if self.faultFilepath is not None:
+            self.faultControllerStarter.stop()
 
     def run( self, test, *args, **kwargs ):
         "Perform a complete start/test/stop cycle."
