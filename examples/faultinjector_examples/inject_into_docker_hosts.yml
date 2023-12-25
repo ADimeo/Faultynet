@@ -1,0 +1,22 @@
+---
+faults:
+  - link_fault:
+      tag: "loss-fault"
+      pre_injection_time: 20
+      injection_time: 10
+      post_injection_time: 3
+      type: "link_fault:loss"
+      identifiers: 
+        - "d10->s1"
+        - "s1->s2"
+      pattern: "random"
+      pattern_args: ['50']
+log:
+  commands:
+    - command: "docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mn.d10"
+    - command: "docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mn.d20"
+    - command: "/usr/sbin/tc -s qdisc show dev d10-eth0"
+      host: "d10"
+    - command: "tc -s qdisc show dev s1-eth2"
+      host: "s1"
+...

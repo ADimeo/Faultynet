@@ -574,13 +574,13 @@ class NodeInjector:
                 FaultLogger.set_fault_inactive(self.tag)
             return
 
-        base_command = f"nsenter --target {str(pid_of_node)} --net --pid --all "
+        base_command = f"nsenter --target {str(pid_of_node)} --net --pid --cgroup "
         full_command = base_command + command_to_execute
 
         time_before = time.time()
         retcode = run(full_command, shell=True).returncode
         time_after = time.time()
-        if time_after - time_after > 2:
+        if time_after - time_before > 2:
             log.error(
                 "Node command took more than 2 seconds to execute. Blocking commands can lead to unexpected outcomes, like logs not generating!\n")
         if enable:

@@ -3,8 +3,12 @@
 Faultynet is a fork of [Containernet](https://github.com/containernet/containernet), which is a fork of the famous [Mininet](http://mininet.org) network emulator.
 Faultynet introduces a simple-to-use API that allows for the injection of different simulated network- and host-based
 faults.
-At this point in time only the ConfigFile fault controller is implemented, which injects faults based on definitions in a .yml file.
-For more details on how to use this fault controller see the [FaultControllersREADME](FaulControllersREADME.md) file.
+At this point in time three different fault controller are implemented:
+- ConfigFileFaultController, which inserts pre-defined faults into pre-defined links based on a timer
+- RandomLinkFaultController, which inserts pre-defined faults into randomly selected links
+- MostUsedFaultController, which inserts pre-defined faults into the busiest links
+
+For more details on how to use these fault controller see the [FaultControllersREADME](FaulControllersREADME.md) file.
 For more implementation details see the [Documentation](Documentation.md) file. 
 
 ## Hello World
@@ -33,7 +37,7 @@ net = Mininet(topo=SimplestTopo(), waitConnected=True, faultFilepath=fault_filep
 net.start()
 ```
 You now have a net with 50% packet loss for the traffic between host h1 and switch s1.
-## Overrview
+## Overview
 ### Features
 Beyond Mininet's and Containernet's features, Faultynet allows you to
 - Define and inject faults into arbitrary interfaces
@@ -43,15 +47,14 @@ Beyond Mininet's and Containernet's features, Faultynet allows you to
   - In different patterns, including burst, increasing degradation, and persistent
   - for cpu stressing, and user defined custom faults
 - log to files, in user-defined intervals, with user-defined logging commands
-- Define custom FaultControllers
+- Define custom FaultControllers by only implementing log-parsing and fault-scheduling logic
 
 
 ### Limitations
 - Only one fault can be injected per interface at the same time
 - Faults can't be injected on bandwidth limited links, or otherwise limited links
-- Faults currently can't be inserted on `Docker` nodes
-- The ConfigFileFaultController does not support nodes that are added during runtime
-- The `link_fault:down` requires interfaces to be managed by ifconfig
+- The fault controllers currently don't support nodes that were added during runtime
+- The `link_fault:down` and MostUsedFaultController require interfaces to be managed by ifconfig
 - When running docker containers the systemd driver is used
   - Modifying this is straightforward, but be aware
 - The operating system must use cgroup1 instead of cgroup2
@@ -61,7 +64,6 @@ Beyond Mininet's and Containernet's features, Faultynet allows you to
 - The minimum burst size for cpu stressing is 1 second
 
 ### Planned Features
-- Implementing additional FaultControllers, including ones that dynamically react to the current state of the net
 - Remove limitations, to allow faults on limited links, multiple faults per interface, and within docker containers
 
 

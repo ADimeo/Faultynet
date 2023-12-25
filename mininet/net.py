@@ -100,6 +100,7 @@ from itertools import chain, groupby
 from math import ceil
 
 from mininet.cli import CLI
+from mininet.fault_controllers.BaseFaultController import BaseFaultControllerStarter
 from mininet.fault_controllers.ConfigFileFaultController import ConfigFileFaultControllerStarter
 from mininet.log import info, error, debug, output, warn
 from mininet.node import ( Node, Docker, Host, OVSKernelSwitch,
@@ -647,6 +648,8 @@ class Mininet( object ):
         if self.waitConn:
             self.waitConnected( self.waitConn )
         if self.faultFilepath:
+            if not issubclass(self.faultControllerStarter, BaseFaultControllerStarter):
+                error("nets faultControllerStarter is not a BaseFaultControllerStarter. Did you pass in the Controller by accident?\n")
             self.faultControllerStarter = self.faultControllerStarter(self, self.faultFilepath)
             self.faultControllerStarter.go()
 

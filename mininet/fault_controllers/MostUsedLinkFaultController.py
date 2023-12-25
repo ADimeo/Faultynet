@@ -87,7 +87,7 @@ class MostUsedLinkFaultController(BaseFaultController):
         # (since both sides of the link won't be balanced.
         # This is not an issue, since for this controller we only check faultless links.
         # For more complex controllers checking both sides of the link will sometimes yield more intuitive results.
-        base_command = f"nsenter --target {str(link_information.link1_pid)} --net --pid --all "
+        base_command = f"nsenter --target {str(link_information.link1_pid)} --net --pid --net "
         command_to_execute_rx = "ifconfig " + link_information.link1_name + """ | grep  "RX packets" | awk '{print $3}'"""
         command_to_execute_tx = "ifconfig " + link_information.link1_name + """ | grep "TX packets" | awk '{print $3}'"""
 
