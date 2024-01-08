@@ -50,15 +50,31 @@ async def redirect_command_test(net: Mininet):
     log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > no_redirect_injected.txt 2>&1") + "\n")
     h1.cmd("timeout 3 ping -i 0.2 10.0.0.2") # between h1 and h2
 
-    await asyncio.sleep(4)
-    log.info("Running ping with injection now...\n")
-    log.info(h1.cmd("timeout 5 tcpdump -i h1-eth0 -w pcap_h1-s1-post.pcap&") + "\n")
+    await asyncio.sleep(7) # 12
+    log.info("Running ping with constant injection now...\n")
+    log.info(h1.cmd("timeout 5 tcpdump -i h1-eth0 -w pcap_h1-s1-const.pcap&") + "\n")
     # log.info(s1.cmd("timeout 5 tcpdump -i s1-eth1 -w pcap_s1-h1-post.pcap&") + "\n") # Calling this line would delete the redirection, since tcpdump overwrites forwarding rules.
-    log.info(s1.cmd("timeout 5 tcpdump -i s1-eth3 -w pcap_s1-h3-post.pcap&") + "\n")
+    log.info(s1.cmd("timeout 5 tcpdump -i s1-eth3 -w pcap_s1-h3-const.pcap&") + "\n")
 
-    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > yes_redirect_injected.txt 2>&1") + "\n")
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > const_redirect_injected.txt 2>&1") + "\n")
+    h1.cmd("timeout 4 ping -i 0.2 10.0.0.2")  # between h1 and h2
+
+    await asyncio.sleep(2) # at 18 seconds
+    log.info("Running ping with 25% injection now...\n")
+    log.info(h1.cmd("timeout 5 tcpdump -i h1-eth0 -w pcap_h1-s1-25.pcap&") + "\n")
+    log.info(s1.cmd("timeout 5 tcpdump -i s1-eth3 -w pcap_s1-h3-25.pcap&") + "\n")
+
+    h1.cmd("timeout 4 ping -i 0.2 10.0.0.2")  # between h1 and h2
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > 25_redirect_injected.txt 2>&1") + "\n")
+
+    await asyncio.sleep(5)
+    log.info("Running ping with 50% injection now...\n")
+    log.info(h1.cmd("timeout 5 tcpdump -i h1-eth0 -w pcap_h1-s1-50.pcap&") + "\n")
+    log.info(s1.cmd("timeout 5 tcpdump -i s1-eth3 -w pcap_s1-h3-50.pcap&") + "\n")
+
+    log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > 50_redirect_injected.txt 2>&1") + "\n")
     h1.cmd("timeout 4 ping -i 0.2 10.0.0.2") # between h1 and h2
-    await asyncio.sleep(4)
+    await asyncio.sleep(5)
     log.info(s1.cmd("sudo /usr/sbin/tc filter show dev s1-eth1 root > post_redirect_removal.txt 2>&1") + "\n")
 
 

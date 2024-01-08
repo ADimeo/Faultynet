@@ -17,6 +17,8 @@ The following changes have been made to this class in the course of thesis work:
 
 For more details, the file thorfi_injector/injector_agent.py in commit db24eccf7796b16ec3f4b2f74df9877cb7b2e2df
 contains the unmodified ThorFI file, and can be diffed against the current version.
+
+Code where development was supported by other developers is explicitly commented.
 """
 import asyncio
 import re
@@ -260,13 +262,39 @@ class LinkInjector:
 
         if 'random' in fault_pattern:
             if 'delay' in fault_type:
-                # e.g., tc qdisc add dev tap0897f3c6-e0 root netem delay 50ms reorder 50%
+                # e.g., tc qdisc add dev tap0897f3c6-e0 root netem delay 50 reorder 50%
+                # Unit for 50 is ms, but according to docs the ms doesn't need to be passed
                 random_perc = 100 - int(fault_pattern_args[0])
                 command = base_qdisc_netem_command + fault_type + ' ' + fault_args[0] + ' reorder ' + str(
                     random_perc) + '%'
             elif 'redirect' in fault_type:
-                log.error("Trying to inject redirect fault with randomness. This is not supported.\n")
-                command = ""
+                percentage_to_redirect = int(fault_pattern_args[0]) # assume 10 for 10%
+                # Our source of random is a random 32 bit value - so calculate a number which if above n percent of that
+                maximum_value = 4294967295
+                boundary = int(maximum_value * (percentage_to_redirect / 100))
+
+                destination_interface = fault_args[0]
+                try:
+                    redirect_or_mirror = fault_args[1]
+                    if redirect_or_mirror not in ['mirror', 'redirect']:
+                        raise IndexError
+                except IndexError:
+                    redirect_or_mirror = 'redirect'
+                # We'll only ever have one of these per interface, so this static handle is fine
+                # This follows the man page examples
+                # add ingress qdisc first
+                if 'add' in tc_cmd:
+                    # This value is 32 bit unsigned, even though in output values greater than 2147483647 become unsigned
+                    filter_string = f' basic match "meta( random mask {maximum_value} lt {boundary} ) " ' # Felix Gohla found out that this line requires an additional mask. This is not documented, and neither of us knows why the mask is required.
+
+                    # ingress qdiscs don't seem to respect their assigned handle, they always fall back to ffff, so
+                    # change at your own risk
+                    prep_command = base_command_tc + 'qdisc ' + tc_cmd + ' dev ' + device + ' handle ffff: ingress '
+                    command = base_command_tc + 'filter ' + tc_cmd + ' dev ' + device + f' parent ffff: {filter_string} ' + \
+                        ' action mirred egress ' + redirect_or_mirror + ' dev ' + destination_interface  # get parent
+                    command = prep_command + " ; " + command
+                elif 'del' in tc_cmd:
+                    command = base_command_tc + 'qdisc ' + tc_cmd + ' dev ' + device + ' ingress '
             else:
                 # in that case for corruption and loss we can use the 'fault_args' that already include random probability
                 command = base_qdisc_netem_command + fault_type + ' ' + str(fault_pattern_args[0]) + '%'
@@ -298,6 +326,8 @@ class LinkInjector:
                 # This follows the man page examples
                 # add ingress qdisc first
                 if 'add' in tc_cmd:
+                    # ingress qdiscs don't seem to respect their assigned handle, they always fall back to ffff, so
+                    # change at your own risk
                     prep_command = base_command_tc + 'qdisc ' + tc_cmd + ' dev ' + device + ' handle ffff: ingress '
                     command = base_command_tc + 'filter ' + tc_cmd + ' dev ' + device + ' parent ffff: matchall ' + \
                               ' action mirred egress ' + redirect_or_mirror + ' dev ' + destination_interface  # get parent

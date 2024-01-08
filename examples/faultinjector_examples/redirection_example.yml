@@ -9,4 +9,25 @@ faults:
       identifiers:
         - "s1->h1" # All traffic that ingresses in the s1 interface that leads to h1 instead appears at the ingress for the interface that leads to h3
       pattern: "persistent"
+  - link_fault:
+      pre_injection_time: 17
+      injection_time: 8
+      post_injection_time: 3
+      type: "link_fault:redirect"
+      type_args: [ "s1->h3", "redirect" ]
+      identifiers:
+        - "s1->h1" # All traffic that ingresses in the s1 interface that leads to h1 instead appears at the ingress for the interface that leads to h3
+      pattern: "random"
+      pattern_args: [ 25 ]
+  - link_fault:
+      pre_injection_time: 26
+      injection_time: 8
+      post_injection_time: 3
+      type: "link_fault:redirect"
+      type_args: [ "s1->h3", "redirect" ]
+      identifiers:
+        - "s1->h1" # All traffic that ingresses in the s1 interface that leads to h1 instead appears at the ingress for the interface that leads to h3
+      pattern: "random"
+      pattern_args: [ 50 ]
+log:
 ...
