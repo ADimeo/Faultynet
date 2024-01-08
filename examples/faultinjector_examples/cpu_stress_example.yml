@@ -8,7 +8,7 @@ faults:
       type_args: ['80']
       identifiers: 
         - "h1"
-      pattern: "static"
+      pattern: "persistent"
   - node_fault:
       pre_injection_time: 10
       injection_time: 10

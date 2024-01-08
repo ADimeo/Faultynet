@@ -198,10 +198,10 @@ class LinkInjector:
 
             log.debug("%s updated degradation value %s\n" % (self.tag, degradation_value))
 
-    async def _inject_static_pattern(self):
+    async def _inject_persistent_pattern(self):
         # iterate over all target devices to enable injection
         interface = self.target_interface
-        log.info("Fault %s starting static injection on nic %s\n" % (self.tag, interface))
+        log.info("Fault %s starting persistent injection on nic %s\n" % (self.tag, interface))
 
         self.inject_nics(interface, self.namespace_pid, self.getFaultType(), self.getFaultPattern(),
                          self.fault_pattern_args, self.fault_args,
@@ -231,7 +231,7 @@ class LinkInjector:
         elif 'degradation' in self.getFaultPattern():
             await self._inject_degradation_pattern()
         else:
-            await self._inject_static_pattern()
+            await self._inject_persistent_pattern()
 
         # END INJECTION CODE
 
@@ -742,7 +742,7 @@ class NodeInjector:
         else:
             log.error(f"{self.tag} has unknown fault type: {self.fault_type}\n")
 
-    async def _inject_static(self):
+    async def _inject_persistent(self):
         log.info("Fault %s commencing persistent\n" % (self.tag))
 
         # Build up
@@ -794,8 +794,8 @@ class NodeInjector:
             await self._inject_burst()
         elif self.fault_pattern == 'degradation':
             await self._inject_degradation()
-        elif self.fault_pattern == 'static':
-            await self._inject_static()
+        elif self.fault_pattern == 'persistent':
+            await self._inject_persistent()
         else:
             log.error(f"{self.tag} has unknown fault pattern")
 

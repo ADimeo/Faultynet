@@ -5,10 +5,10 @@ faults:
       injection_time: 5
       post_injection_time: 5
       type: "node_fault:custom"
-      type_args: ['echo "static on $(date)" >> custom_node_command_test.txt', 'echo "off $(date)" >> custom_node_command_test.txt']
+      type_args: ['echo "persistent on $(date)" >> custom_node_command_test.txt', 'echo "off $(date)" >> custom_node_command_test.txt']
       identifiers: 
         - "h1"
-      pattern: "static"
+      pattern: "persistent"
   - node_fault:
       pre_injection_time: 10
       injection_time: 10
