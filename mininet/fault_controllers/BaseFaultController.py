@@ -191,7 +191,7 @@ class BaseFaultControllerStarter:
         - for h1, never. Only the indicated node will be returned."""
         # These patterns are expected for link_fault s
         implicit_link_regex = "^(\w*)->(\w*)$"  # matches "host_name->host_name"
-        explicit_link_regex = "^(\w*)->(\w*):(\w*)$"  # matches "host_name->host_name:interface_name", useful if more than one link exists
+        explicit_link_regex = "^(\w*)->(\w*):([\w|-]*)$"  # matches "host_name->host_name:interface_name", useful if more than one link exists
         if identifier_string is None:
             # This can happen for e.g. log commands, that don't need to be executed on a specific host
             return None, None
