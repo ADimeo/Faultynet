@@ -21,6 +21,7 @@ contains the unmodified ThorFI file, and can be diffed against the current versi
 Code where development was supported by other developers is explicitly commented.
 """
 import asyncio
+import json
 import re
 import subprocess
 import pathlib
@@ -414,7 +415,11 @@ class LinkInjector:
                 # add ingress qdisc first
                 if 'add' in tc_cmd:
                     # This value is 32 bit unsigned, even though in output values greater than 2147483647 become unsigned
-                    filter_string = f' basic match "meta( random mask {maximum_value} lt {boundary} ) " ' # Felix Gohla found out that this line requires an additional mask. This is not documented, and neither of us knows why the mask is required.
+                    filter_string = f' basic match "meta( random mask {maximum_value} lt {boundary} ) " ' # Felix Gohla found out that this line requires an additional mask.
+                    # The reason for that is that the "random" value is 64 bits of random (which contradicts the manpage,
+                    # which states that it's 32 bits of random, and the value to compare is truncated to 32 bits.
+                    # (So without the mask theres ~32 bits that will always be greater than the value provided by a caller)
+
 
                     # ingress qdiscs don't seem to respect their assigned handle, they always fall back to ffff, so
                     # change at your own risk
@@ -735,6 +740,11 @@ class NodeInjector:
 
         base_command = f"nsenter --target {str(pid_of_node)} --net --pid --cgroup "
         full_command = base_command + command_to_execute
+
+        # Without this all commands post-pipe aren't executed in the namespace anymore
+        if '|' in full_command:
+            full_command = full_command.replace("|", f"nsenter --target {str(pid_of_node)} --net --pid ")
+
 
         time_before = time.time()
         retcode = run(full_command, shell=True).returncode
