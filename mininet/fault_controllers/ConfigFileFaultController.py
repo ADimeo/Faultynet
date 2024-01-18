@@ -9,8 +9,7 @@ from ast import literal_eval
 
 from mininet import log
 from mininet.fault_controllers.BaseFaultController import BaseFaultControllerStarter, BaseFaultController
-from mininet.fault_injectors import LinkInjector, NodeInjector
-
+from mininet.fault_injectors import LinkInjector, NodeInjector, MultiInjector
 
 
 class ConfigFileFaultController(BaseFaultController):
@@ -61,6 +60,7 @@ class ConfigFileFaultController(BaseFaultController):
                 continue
 
             link_fault_regex = "^link_fault:(\w*)$"
+            multi_fault_regex = "^multi_fault$"
             node_fault_regex = "^node_fault:(\w*)$"
 
             if match := re.match(link_fault_regex, fault_type_value):
@@ -90,6 +90,29 @@ class ConfigFileFaultController(BaseFaultController):
                                             pre_injection_time=pre_injection_time,
                                             injection_time=injection_time,
                                             post_injection_time=post_injection_time)
+                    self.faults.append(injector)
+            elif match := re.match(multi_fault_regex, fault_type_value):
+                for identifier_string in fault_dict.get("identifiers"):
+                    identifier_tuple = literal_eval(identifier_string)
+                    node_process_pid = identifier_tuple[0]
+                    node_string_reference = identifier_tuple[2]
+                    actual_tag = tag + "@" + node_string_reference
+
+
+                    config_string = fault_dict.get('tc_config', None)
+                    if config_string is None:
+                        log.error(f"Fault {tag} has no config to apply!\n")
+
+                    injector = MultiInjector(target_namespace_pid=node_process_pid,
+                                         tag=actual_tag,
+                                         fault_pattern=fault_pattern,
+                                         fault_pattern_args=fault_pattern_args,
+                                         config_string=config_string,
+
+                                         pre_injection_time=pre_injection_time,
+                                         injection_time=injection_time,
+                                         post_injection_time=post_injection_time)
+
                     self.faults.append(injector)
             elif match := re.match(node_fault_regex, fault_type_value):
                 fault_type = match.groups()[0]
@@ -123,7 +146,7 @@ class ConfigFileFaultControllerStarter(BaseFaultControllerStarter):
 
     def make_controller_config(self, net: 'Mininet', yml_config: dict) -> dict:
         for i, fault_object in enumerate(yml_config.get("faults")):
-            # We expect a single key here, either link_fault or node_fault
+            # We expect a single key here, either link_fault, node_fault, or multi_fault
             # Right now we don't care which one it is, so just get the first key
             fault_type = list(fault_object.keys())[0]
             fault_dict = fault_object.get(fault_type)
@@ -148,7 +171,7 @@ class ConfigFileFaultControllerStarter(BaseFaultControllerStarter):
                                                                                                  potential_interface_name)
                 else:
                     interface_name = potential_interface_name
-
+                # For these redirect faults it must be a link_fault, so that part can be hardcoded
                 yml_config['faults'][i]['link_fault']['type_args'][0] = interface_name
         log_dict = self.get_controller_log_dict(net, yml_config)
         if log_dict is not None:

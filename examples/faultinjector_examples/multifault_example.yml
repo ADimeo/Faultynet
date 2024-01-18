@@ -1,0 +1,50 @@
+---
+faults:
+  - multi_fault:
+      type: multi_fault
+      pre_injection_time: 3
+      injection_time: 3
+      post_injection_time: 3
+      tc_config: >
+        {"s1-eth1": {
+          "outgoing": {
+              "dst-port=80, protocol=ip": {
+                  "filter_id": "800::800",
+                  "delay": "2.5ms",
+                  "delay-distro": "1.2ms",
+                  "loss": "0.01%",
+                  "rate": "250Kbps"
+                  }
+          },
+          "incoming": { }
+          }
+        }
+      identifiers:
+        - "s1->h1:s1-eth1"
+      pattern: "persistent"  # user-provided, "burst", "degradation"
+      pattern_args: [500,1000] # burst length/period in ms
+  - multi_fault:
+      type: multi_fault
+      pre_injection_time: 3
+      injection_time: 10
+      post_injection_time: 3
+      tc_config: >
+        {"h1-eth0": {
+          "outgoing": {
+              "dst-port=80, protocol=ip": {
+                  "filter_id": "800::800",
+                  "delay": "2.5ms",
+                  "delay-distro": "1.2ms",
+                  "loss": "0.01%",
+                  "rate": "250Kbps"
+                  }
+          },
+          "incoming": { }
+          }
+        }
+      identifiers:
+        - "h1->s1:h1-eth0"
+      pattern: "persistent"  # user-provided, "burst", "degradation"
+      pattern_args: [ 500,1000 ] # burst length/period in ms
+log:
+...

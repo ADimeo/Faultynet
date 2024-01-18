@@ -33,6 +33,135 @@ from subprocess import call, run
 from mininet.faultlogger import FaultLogger
 
 tc_path = str(pathlib.Path(__file__).parent.parent.resolve()) + "/bin"
+class MultiInjector:
+    """Link-based injector. Injects multiple faults into a link. All faults need to be based on the tc-netem module.
+    """
+    def __init__(self,
+                 target_namespace_pid=None,  # pid of the main node shell we should inject on
+                 tag=None,  # Must be unique between all faults
+
+                 fault_pattern=None,  # user-provided, "burst", "degradation", "random", "persistent"
+                 fault_pattern_args=None,  # user-provided
+                 config_string=None,
+
+                 pre_injection_time=0,  # Time we wait before the injection activates
+                 injection_time=20,  # How long the injection activates
+                 post_injection_time=0): # How long after the injection we wait until the injector considers itself inactive
+
+
+        self.target_process_pid = target_namespace_pid
+        self.tag = tag
+
+        self.fault_pattern = fault_pattern
+        if not isinstance(fault_pattern_args, list) and fault_pattern_args is not None:
+            log.warn("fault_patterns are not a list, are you sure that is what you want?\n")
+        self.fault_pattern_args = fault_pattern_args
+
+
+
+        self.pre_injection_time = pre_injection_time
+        self.injection_time = injection_time
+        self.post_injection_time = post_injection_time
+
+        self.inject_command, self.eject_command = self.build_start_command(config_string)
+
+
+    def build_start_command(self, config_string):
+        start_command = f"echo '{config_string}' | tcset /dev/stdin --import-setting"
+
+        config = json.loads(config_string)
+        target_interface_names = list(config.keys())
+
+        unset_config = {}
+
+        reset_single_interface_config = {"outgoing": {},
+                        "incoming": {}}
+
+        for interface_name in target_interface_names:
+            unset_config[interface_name] = reset_single_interface_config
+
+        reset_config_string = json.dumps(unset_config)
+
+        end_command = f"echo '{reset_config_string}' | tcset /dev/stdin --import-setting"
+        return start_command, end_command
+
+
+    async def go(self):
+        await self.do_injection()
+
+
+    def execute_command_for_node(self, pid_of_node, command_to_execute, enable):
+        """Executes the command on the node. Enable signals whether the command
+        is activating or deactivating a fault, which is important for logging.
+        If command_to_execute is None, no command is executed, but the information
+        is still passed to the logger"""
+
+        base_command = f"nsenter --target {str(pid_of_node)} --net --pid "
+
+
+        full_command = base_command + command_to_execute
+
+        if '|' in full_command:
+            full_command = full_command.replace("|", f"nsenter --target {str(pid_of_node)} --net --pid ")
+
+        time_before = time.time()
+        retcode = run(full_command, shell=True).returncode
+        time_after = time.time()
+
+        if enable:
+            FaultLogger.set_fault_active(self.tag, "multi-fault", command_to_execute, retcode)
+        else:
+            FaultLogger.set_fault_inactive(self.tag)
+
+        if retcode < 0:
+            log.debug("Command '%s' was terminated not correctly (recode %s)\n" % (full_command, -retcode))
+        else:
+            log.debug("Command '%s' was terminated correctly (retcode %s)\n" % (full_command, retcode))
+
+
+    async def _inject_burst(self):
+        log.info("Fault %s commencing burst\n" % (self.tag))
+
+        burst_config = self.fault_pattern_args
+        if len(burst_config) < 2:
+            log.error(f"{self.tag} missing fault pattern args for injection\n")
+        if len(burst_config) < 2:
+            log.error(f"{self.tag} burst is missing parameters, defaulting to 1 second per 2 seconds\n")
+            burst_duration = 1
+            burst_period = 2
+        else:
+            burst_duration = int(burst_config[0]) / 1000
+            burst_period = int(burst_config[1]) / 1000  # after each burst, wait for (burst_period - burst_duration)
+
+        burst_num = int((self.injection_time) / burst_period)  # how often we burst
+
+        for _ in range(burst_num):
+            self.execute_command_for_node(self.target_process_pid, self.inject_command, True)
+            await asyncio.sleep(burst_duration)
+            self.execute_command_for_node(self.target_process_pid, self.eject_command, False)
+            await asyncio.sleep(burst_period - burst_duration)
+
+    async def _inject_persistent(self):
+        log.info("Fault %s commencing persistent\n" % (self.tag))
+        duration_in_seconds = self.injection_time
+        self.execute_command_for_node(self.target_process_pid, self.inject_command, True)
+        await asyncio.sleep(duration_in_seconds)
+        self.execute_command_for_node(self.target_process_pid, self.eject_command, False)
+
+    async def do_injection(self):
+        log.info("Fault %s waits %s s of pre-injection time\n" % (self.tag, self.pre_injection_time))
+        await asyncio.sleep(self.pre_injection_time)
+        if self.fault_pattern == 'burst':
+            await self._inject_burst()
+        elif self.fault_pattern == 'persistent':
+            await self._inject_persistent()
+        else:
+            log.error(f"{self.tag} has unknown fault pattern")
+
+        log.info("Fault %s waits %s s of post-injection time\n" % (self.tag, self.post_injection_time))
+        await asyncio.sleep(self.post_injection_time)
+
+        return
 
 
 class LinkInjector:
