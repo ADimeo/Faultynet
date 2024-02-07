@@ -48,8 +48,7 @@ It is important to call `await super().go()` before running custom code, and to 
 once the controller is done with its work. If those function calls are not performed things will break.
 
 ## Injecting Faults
-To inject a fault, construct a `LinkInjector` or a `NodeInjector`, and launch them with the `go()`.
-Currently `LinkInjector`s and `NodeInjectors` exist. Their interfaces are well commented, but for clarity:
+To inject a fault, construct a `LinkInjector`, `MultiInjecor` or `NodeInjector`, and launch them with the `go()`.
 - Each FaultController injects exactly one fault, on one node or interface. 
   - This means that injecting a fault on one link requires to `LinkInjector`s, one for each interface at the ends of the link
   - One fault can lead to multiple commands being executed on a host, e.g. for a burst, which turns an injection on and off repeatedly

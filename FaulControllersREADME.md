@@ -42,7 +42,7 @@ faults:
       pre_injection_time: 0 # int in seconds, defaults to 0
       injection_time: 20 # int in seconds, defaults to 20
       post_injection_time: 0 # int in seconds, defaults to 0
-      type: "link_fault:loss" # "link_fault:limit", "link_fault:delay", "link_fault:loss", "link_fault:corrupt", "link_fault:duplicate", "link_fault:reorder", "link_fault:rate", "link_fault:slot"; "link_fault:down","link_fault:redirect", "link_fault:bottleneck"
+      type: "link_fault:loss" # "link_fault:delay", "link_fault:loss", "link_fault:corrupt", "link_fault:duplicate", "link_fault:reorder", "link_fault:rate"; "link_fault:down","link_fault:redirect", "link_fault:bottleneck"
       type_args: ["10", 10, 10] # Arguments for type. Vary depending on "type". See below for details
       identifiers: # Supports the two patterns below
         - "host_name_a->host_name_b" # Inject on host_name_a, on the interface that links it to host_name_b
@@ -108,6 +108,9 @@ Executes custom commands, as indicated by `fault_args[0]`. An optional disable c
 the injection period ends, e.g. after each burst, or after each degradation step.
 When in the degradation pattern, `fault_args[0]` can contain `{}`. This position is then filled by the degradation
 pattern.
+
+Do note that these commands are executed from the host file system, but within the container. This behavior can be modified by
+adding the `--all` flag to the executed `nsenter` command.
 
 ### Patterns
 #### burst

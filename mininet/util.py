@@ -558,7 +558,7 @@ def mountCgroups():
             'cgroups %s' % cgdir not in mounts)):
         # You may be here because your system is running on cgroups2 instead of cgroups 1
         # This is commonly the case in modern systems, e.g. Changed to cgroup2 in 21.10
-        # The simplest solution is changing
+        # Alternatively, you may be here because the cgroup_parent of your nodes is wrong
         raise Exception( "cgroups not mounted on " + cgdir )
     if 'cpuset %s' % csdir not in mounts:
         errRun( 'mkdir -p ' + csdir )
