@@ -216,7 +216,7 @@ class BaseFaultControllerStarter:
 
         if nodename_b is None:
             # not looking for an interface name, so we can skip that part
-            for node in net.hosts:
+            for node in net.hosts + net.switches + net.controllers:
                 # Running over hosts _should_ be fine, since switches (usually) run in the root namespace
                 # (and None defaults to the root namespace in the fault injectors)
                 # If that doesn't work add in the switches/etc. into this list.

@@ -68,7 +68,7 @@ def fault_example_scenario():
 
     net = Mininet(topo=topo, switch=Switch, faultControllerStarter=RandomLinkFaultControllerStarter,
                    controller=Controller, link=Link,
-                   waitConnected=True, faultFilepath=fault_filepath)
+                   waitConnected=True,  faultFilepath=fault_filepath)
     net.start()
     asyncio.run(degradation_command_test(net))
 

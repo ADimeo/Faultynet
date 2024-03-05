@@ -9,6 +9,7 @@ import pathlib
 import sys
 
 from mininet import log
+from mininet.fault_controllers.ConfigFileFaultController import ConfigFileFaultControllerStarter
 from mininet.log import lg
 from mininet.net import Mininet
 from mininet.node import OVSKernelSwitch, Controller, CPULimitedHost
@@ -79,7 +80,9 @@ def fault_example_scenario():
     host = custom(CPULimitedHost, cpu=.1)
     net = Mininet(topo=topo, switch=Switch,
                    controller=Controller, link=Link, host=host,
-                   waitConnected=True, faultFilepath=fault_filepath)
+                   waitConnected=True,
+                  faultControllerStarter=ConfigFileFaultControllerStarter,
+                  faultFilepath=fault_filepath)
 
     net.start()
 
