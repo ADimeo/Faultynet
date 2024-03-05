@@ -1,0 +1,20 @@
+---
+faults:
+  - link_fault:
+      pre_injection_time: 5
+      injection_time: 5
+      post_injection_time: 5
+      type: "link_fault:loss" # loss, then corrupt, then down
+      identifiers:
+        - "h2->s01"
+        - "s01->h2"
+      pattern: "persistent"
+log:
+  commands:
+    - tag: "reroute-switch"
+      host: "s12"
+      command: "ovs-ofctl dump-flows s12"
+    - tag: "main-switch"
+      host: "s01"
+      command: "ovs-ofctl dump-flows s01"
+...
