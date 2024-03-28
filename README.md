@@ -143,6 +143,7 @@ For more details about available controllers, see [FaultControllersREADME.md]([F
 Faultynets documentation is contained in two files: [FaultControllersREADME](FaulControllersREADME.md) contains details about
 different types of available fault controllers, whereas [Documentation](Documentation.md) contains information about
 Containernet's documentation can be found in the [GitHub wiki](https://github.com/containernet/containernet/wiki).
+Faultynets additions are also discussed in a [masters thesis](hand-in-version.pdf), which is contained in this repo for ease of access.
 The documentation for the underlying Mininet project can be found on the [Mininet website](http://mininet.org/).
 
 ### Support
